@@ -1,0 +1,14 @@
+influx_bucket = "sensorBox"
+influx_org = ""
+influx_token = ""
+influx_url = "http://localhost:1234"
+firebase_certificate_file = "something.json"
+coap_bind_ip = "0.0.0.0"
+coap_bind_port = 1235
+webhook_bind_port = 1236
+# the time you want digest push notifications on the app
+daily_digest_hr = 18
+daily_digest_min = 30
+altitude_m = 0
+# add unique names for different ESP32's as entered in the captive portal
+device_names = ["sensorBox", "roomSensors"]

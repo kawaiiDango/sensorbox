@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Sensorbox</string>
+    <string name="subscribe_to_topics">Subscribe to topics:</string>
+</resources>

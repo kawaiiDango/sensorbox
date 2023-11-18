@@ -1,0 +1,5 @@
+aiocoap[all]
+aiohttp
+cbor2
+firebase-admin
+influxdb-client
