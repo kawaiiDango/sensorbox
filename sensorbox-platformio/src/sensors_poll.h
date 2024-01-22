@@ -100,19 +100,13 @@ void pollBmp280()
 
   if (bmp.begin(0x76))
   {
-    bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,      /* Operating Mode. */
+    bmp.setSampling(Adafruit_BMP280::MODE_FORCED,      /* Operating Mode. */
                     Adafruit_BMP280::SAMPLING_X1,      /* Temp. oversampling */
                     Adafruit_BMP280::SAMPLING_X8,      /* Pressure oversampling */
-                    Adafruit_BMP280::FILTER_X8,        /* Filtering. */
+                    Adafruit_BMP280::FILTER_OFF,        /* Filtering. */
                     Adafruit_BMP280::STANDBY_MS_4000); /* Standby time. */
 
     bmp_pressure->getEvent(&pressureEvent);
-
-    bmp.setSampling(Adafruit_BMP280::MODE_SLEEP,       /* Operating Mode. */
-                    Adafruit_BMP280::SAMPLING_X1,      /* Temp. oversampling */
-                    Adafruit_BMP280::SAMPLING_X8,      /* Pressure oversampling */
-                    Adafruit_BMP280::FILTER_X8,        /* Filtering. */
-                    Adafruit_BMP280::STANDBY_MS_4000); /* Standby time. */
 
     readings.pressure = pressureEvent.pressure;
   }
