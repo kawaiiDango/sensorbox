@@ -113,7 +113,7 @@ async def make_digest() -> None:
         max_result = (await do_query(query_api, query_partial + "|> max()"))[-1]
         mean_result = (await do_query(query_api, query_partial + "|> mean()"))[-1]
         noti_msgs.append(
-            f"{name}: 🔻{min_result:.2f} 🔺{max_result:.2f} 🔹{mean_result:.2f}"
+            f"{name}: 🔻{min_result:.1f} 🔺{max_result:.1f} 🔹{mean_result:.1f}"
         )
 
     fcm_sender.enqueue(
