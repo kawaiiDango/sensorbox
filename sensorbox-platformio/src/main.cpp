@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include "driver/adc.h"
 #include "driver/rtc_io.h"
 #include "esp_ota_ops.h"
 #include <stdarg.h>
@@ -48,9 +47,8 @@ TaskHandle_t arduino_task_handle;
 const uint8_t WAKEUP_FIRST_BOOT = 1 << 0;
 const uint8_t WAKEUP_MEASURE = 1 << 1;
 const uint8_t WAKEUP_SUBMIT = 1 << 2;
-const uint8_t WAKEUP_MEASURE_PM = 1 << 3;
-const uint8_t WAKEUP_MEASURE_VOC = 1 << 4;
-const uint8_t WAKEUP_AP_MODE = 1 << 5;
+const uint8_t WAKEUP_MEASURE_PM_AND_CO2 = 1 << 3;
+const uint8_t WAKEUP_AP_MODE = 1 << 4;
 
 RTC_DATA_ATTR uint8_t wakeupReasonsBitset = WAKEUP_FIRST_BOOT | WAKEUP_MEASURE;
 
@@ -68,7 +66,7 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info);
 void WiFiLostIP(WiFiEvent_t event, WiFiEventInfo_t info);
 void WiFiStationConnected(WiFiEvent_t event, WiFiEventInfo_t info);
 void connectToWiFiIfNeeded();
-IRAM_ATTR void touchCallback();
+void touchCallback();
 void pollAllSensors();
 void calibrateTouchTask(void *arg);
 
@@ -115,7 +113,9 @@ void runApMode()
   enableBacklight(true);
   lcd.setTextColor(0xFFFF, 0x0000);
   printToLcdAndSerial("Setup Mode");
-  setCpuFreqIfNeeded(80);
+#else
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
 #endif
 
   bool success = frb_save_from_rtc(true);
@@ -223,7 +223,8 @@ void printSensorDataToLcd()
   {
     float irPercent = ((float)readings.ir / readings.visible) * 100;
     sprintf(strbuf,
-            "%.1f %s\n%d %s\n%.1f %%IR\n%d/%d touch\n%.2f V\nv%s",
+            "%hd ppm\n%.1f%s %d%s\n%.1f %%IR\n%d/%d touch\n%.2f V\nv%s",
+            oobLastCo2,
             temperatureRead(), "C",
             WiFi.RSSI(), units.rssi,
             irPercent,
@@ -243,7 +244,6 @@ void printSensorDataToLcd()
 
 void doOnFreshBoot()
 {
-
   esp_reset_reason_t resetReason = esp_reset_reason();
   if (resetReason != prefs.lastResetReason && resetReason != ESP_RST_DEEPSLEEP
       // resetReason != ESP_RST_POWERON &&
@@ -268,10 +268,6 @@ void doOnFreshBoot()
   printToLcdAndSerial(tmp2);
   printToLcdAndSerial("setup wifi");
 
-#else
-  digitalWrite(LED_PIN, LOW);
-  delay(3000);
-  digitalWrite(LED_PIN, HIGH);
 #endif
 
   // wifi setup
@@ -290,6 +286,9 @@ void doOnTouchpadWakeup()
 #ifdef THE_BOX
   updateLcdStatus(true);
   printSensorDataToLcd();
+#else
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
 #endif
   connectToWiFiIfNeeded();
 }
@@ -312,7 +311,7 @@ void doOnEveryBoot()
   Serial.print(millis());
   Serial.println(wakeupReasonsBitset, BIN);
 
-  const esp_app_desc_t *appDesc = esp_ota_get_app_description();
+  const esp_app_desc_t *appDesc = esp_app_get_description();
 
   sprintf(version_str, "%s-%sv%s", appDesc->date, appDesc->time, appDesc->version);
   Serial.print("Build: ");
@@ -322,7 +321,7 @@ void doOnEveryBoot()
   {
     ESP_LOGE(TAG_MAIN, "Repeated brownouts, going to sleep");
     Serial.flush();
-    esp_deep_sleep(1000000ULL * 60 * 60 * 24);
+    esp_deep_sleep_start();
   }
 
   xTaskCreate(
@@ -360,6 +359,7 @@ void prepareBootIntoApMode()
 void doWhileAwakeLoop()
 {
 #ifdef THE_BOX
+  bool firstScd41ReadingDiscarded = !bitsetContains(wakeupReasonsBitset, WAKEUP_FIRST_BOOT);
   if (!isIdle())
     printSensorDataToLcd();
 #endif
@@ -369,7 +369,14 @@ void doWhileAwakeLoop()
     if (rtcMillis() - collectingTime > collectingIntervalActive)
     {
       pollAllSensors();
+
 #ifdef THE_BOX
+      if (!firstScd41ReadingDiscarded)
+      {
+        delay(5000); // response time for one shot measurement
+        prePollScd41();
+        firstScd41ReadingDiscarded = true;
+      }
       updateLcdStatus(true);
       printSensorDataToLcd();
 #endif
@@ -396,7 +403,7 @@ void doWhileAwakeLoop()
 
 #ifdef THE_BOX
   if (lcdStarted)
-    lcd.powerSaving(true);
+    lcdPowerSaving(true);
 #endif
 }
 
@@ -538,7 +545,6 @@ void connectToWiFiIfNeeded()
   WiFi.setSleep(true);
   WiFi.setAutoReconnect(false);
   WiFi.setScanMethod(WIFI_FAST_SCAN);
-  // WiFi.setTxPower(WIFI_POWER_2dBm);
 
   IPAddress primaryDNS(1, 1, 1, 1);
   IPAddress secondaryDNS(1, 0, 0, 1);
@@ -569,6 +575,11 @@ void connectToWiFiIfNeeded()
   const char *wifiPassword = strlen(prefs.wifiPassword) > 0 ? prefs.wifiPassword : NULL;
 
   WiFi.begin(prefs.wifiSsid, wifiPassword, lastConnectedWifiChannel, bssid);
+
+#ifndef THE_BOX
+  // this esp32 is kept very close to the router
+  WiFi.setTxPower(WIFI_POWER_2dBm);
+#endif
 }
 
 IRAM_ATTR void touchCallback()
@@ -594,34 +605,40 @@ void pollAllSensors()
   pollingCtr = 0;
 
   createPollingTask(pollI2cSensors, "pollI2cSensors");
-  createPollingTask(pollBoardStats, "pollBoardStats");
+  createPollingTask(pollBatteryVoltage, "pollBatteryVoltage");
 
 #ifdef THE_BOX
-  createPollingTask(pollBatteryVoltage, "pollBatteryVoltage");
   createPollingTask(pollPir, "pollPir");
-  createPollingTask(pollAudio, "pollAudio", configMINIMAL_STACK_SIZE * 5, 3);
+  createPollingTask(pollAudio, "pollAudio");
 
   // start and schedule sds
   if (rtcMillis() - sdsStartTime > prefs.collectIntvlMs * prefs.pmSensorEvery)
   {
     createPollingTask(startSds, "startSds");
-    priorityQueueWrite(wakeupTasksQ, WakeupTask{WAKEUP_MEASURE_PM, rtcMillis() + PM_SENSOR_RUNTIME_SECS * 1000});
+    priorityQueueWrite(wakeupTasksQ, WakeupTask{WAKEUP_MEASURE_PM_AND_CO2, rtcMillis() + PM_SENSOR_RUNTIME_SECS * 1000});
   }
 #endif
 
   EventBits_t pollingCompleteBitset = (1 << pollingCtr) - 1;
   xEventGroupWaitBits(pollingEventGroup, pollingCompleteBitset, pdTRUE, pdTRUE, portMAX_DELAY);
 
+  // poll heap stats towards the end
+  pollBoardStats();
+
   if (lastAwakeDuration > 0)
     readings.awakeTime = lastAwakeDuration;
 
 #ifdef THE_BOX
-  if (!oobPmValueUsed)
+  if (rtcMillis() - sdsStartTime > prefs.collectIntvlMs * prefs.pmSensorEvery)
+    sdsStartTime = rtcMillis();
+
+  if (!oobValuesUsed)
   {
     readings.pm25 = oobLastPm25;
     readings.pm10 = oobLastPm10;
+    readings.co2 = oobLastCo2;
 
-    oobPmValueUsed = true;
+    oobValuesUsed = true;
   }
 #endif
 
@@ -651,10 +668,11 @@ void calibrateTouchTask(void *arg)
     while (count < 3)
     {
       touch = touchRead(TOUCH_PIN);
-      if (touch < 1)
-        continue;
-      count++;
-      totalTouchValue += touch;
+      if (touch > 1)
+      {
+        count++;
+        totalTouchValue += touch;
+      }
       delay(5);
     }
 
@@ -687,12 +705,6 @@ void setup()
     bitsetAdd(nextWakeupReasonsBitset, WAKEUP_MEASURE);
   }
 
-  // // turn on wifi before measure to save tine and get board stats
-  // if (bitsetContains(wakeupReasonsBitset, WAKEUP_SUBMIT))
-  // {
-  //   wifiSetup();
-  //   connectToWiFiIfNeeded();
-  // }
   if (bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE))
   {
     pollAllSensors();
@@ -725,8 +737,16 @@ void setup()
 
 // out of band wakeup
 #ifdef THE_BOX
-  if (bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_PM))
+  if (bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_PM_AND_CO2))
+  {
     pollSds();
+    // co2 data is also ready by this time
+    if (scd41ReadPending)
+    {
+      Wire.begin();
+      pollScd41();
+    }
+  }
 #endif
 
   if (bitsetContains(wakeupReasonsBitset, WAKEUP_AP_MODE))
@@ -749,7 +769,7 @@ void setup()
     xSemaphoreTake(coap_loop_semaphore, portMAX_DELAY);
   }
 
-  coapClientCleanup();
+  coap_client_cleanup();
   esp_wifi_stop();
   LittleFS.end();
 
@@ -773,4 +793,7 @@ void setup()
   esp_deep_sleep_start();
 }
 
-void loop() {}
+void loop()
+{
+  delay(1000);
+}

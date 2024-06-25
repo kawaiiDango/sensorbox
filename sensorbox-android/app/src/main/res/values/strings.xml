@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Sensorbox</string>
     <string name="subscribe_to_topics">Subscribe to topics:</string>
+    <string name="no_data">No data</string>
 </resources>

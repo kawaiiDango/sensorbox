@@ -1,13 +1,30 @@
 package com.arn.sensorbox
 
+import androidx.datastore.core.Serializer
 import com.arn.sensorbox.widget.SensorBoxData
-import hu.autsoft.krate.SimpleKrate
-import hu.autsoft.krate.booleanPref
-import hu.autsoft.krate.default.withDefault
-import hu.autsoft.krate.kotlinx.kotlinxPref
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.decodeFromStream
+import kotlinx.serialization.json.encodeToStream
+import java.io.InputStream
+import java.io.OutputStream
 
-class MyPrefs : SimpleKrate(App.context) {
-    var cachedData by kotlinxPref<SensorBoxData>("cached_data").withDefault(SensorBoxData(timestamp = 0L))
-//    var subscribedToDigests by booleanPref("subscribed_to_digests").withDefault(false)
-    var fcmRegistered by booleanPref("fcm_registered").withDefault(false)
+@Serializable
+data class MyPrefs(
+    val cachedData: SensorBoxData = SensorBoxData(),
+    val subscribedTopics: Set<String> = emptySet(),
+)
+
+object MyPrefsSerializer : Serializer<MyPrefs> {
+    override val defaultValue = MyPrefs()
+
+    override suspend fun readFrom(input: InputStream) =
+        try {
+            App.json.decodeFromStream<MyPrefs>(input)
+        } catch (exception: SerializationException) {
+            defaultValue
+        }
+
+    override suspend fun writeTo(t: MyPrefs, output: OutputStream) =
+        App.json.encodeToStream(t, output)
 }

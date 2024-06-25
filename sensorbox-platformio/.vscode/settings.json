@@ -12,6 +12,10 @@
         "random": "cpp",
         "initializer_list": "cpp",
         "cmath": "cpp",
-        "new": "cpp"
+        "new": "cpp",
+        "mutex": "cpp",
+        "freertos.h": "c",
+        "bit": "cpp",
+        "compare": "cpp"
     }
 }

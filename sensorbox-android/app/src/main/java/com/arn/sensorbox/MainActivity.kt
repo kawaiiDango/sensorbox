@@ -3,7 +3,6 @@ package com.arn.sensorbox
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,22 +19,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import com.arn.sensorbox.ui.theme.SensorboxTheme
-import com.google.firebase.ktx.Firebase
-import com.google.firebase.messaging.ktx.messaging
+import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-
-const val TAG = "MainActivity"
 
 class MainActivity : ComponentActivity() {
 
@@ -48,21 +44,9 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    Column(
-                        modifier = Modifier.wrapContentSize(),
-                    ) {
-                        Text(text = stringResource(R.string.subscribe_to_topics), modifier = Modifier.padding(8.dp))
-                        LabelledCheckbox(name = "widget")
-                        LabelledCheckbox(name = "digests")
-                        LabelledCheckbox(name = "alerts")
-                    }
+                    AppContent()
                 }
             }
-        }
-
-        lifecycleScope.launch {
-            if (!App.prefs.fcmRegistered)
-                registerDevice()
         }
 
         // Request notification permissions
@@ -77,51 +61,69 @@ class MainActivity : ComponentActivity() {
                 requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
             }
         }
-
-    }
-
-    private fun registerDevice() {
-        // register device with firebase cloud messaging
-        Firebase.messaging.token
-            .addOnCompleteListener { task ->
-                if (!task.isSuccessful) {
-                    Log.e(TAG, task.exception!!.message.toString())
-                }
-                Log.i("FCM TOKEN", task.result)
-
-                // set clipboard with token
-//                val clipboard = getSystemService(ClipboardManager::class.java)
-//                val clip = ClipData.newPlainText("FCM Token", task.result)
-//                clipboard.setPrimaryClip(clip)
-                App.prefs.fcmRegistered = true
-                Toast.makeText(this, "Registered!", Toast.LENGTH_SHORT).show()
-            }
     }
 }
 
 @Composable
-fun LabelledCheckbox(name: String) {
-    val wasChecked = App.prefs.sharedPreferences.getBoolean("subscribed_to_$name", false)
+private fun AppContent() {
+    Column(
+        modifier = Modifier.wrapContentSize(),
+    ) {
+        val subscribedTopics = App.prefs.data.map { it.subscribedTopics }
+            .collectAsState(emptySet())
 
-    val (checkedState, onStateChange) = remember { mutableStateOf(wasChecked) }
+        val scope = rememberCoroutineScope()
+
+        Text(
+            text = stringResource(R.string.subscribe_to_topics),
+            modifier = Modifier.padding(8.dp)
+        )
+
+        arrayOf("widget", "digests", "alerts").forEach { topic ->
+            LabelledCheckbox(
+                name = topic,
+                checked = subscribedTopics.value.contains(topic)
+            ) {
+                subscribeToTopic(scope, topic, it)
+            }
+        }
+    }
+}
+
+private fun subscribeToTopic(scope: CoroutineScope, topic: String, subscribe: Boolean) {
+    FirebaseMessaging.getInstance()
+        .let {
+            if (subscribe)
+                it.subscribeToTopic(topic)
+            else
+                it.unsubscribeFromTopic(topic)
+        }
+        .addOnCompleteListener { task ->
+            if (!task.isSuccessful) {
+                Toast.makeText(App.context, task.exception!!.message.toString(), Toast.LENGTH_SHORT)
+                    .show()
+            } else {
+                scope.launch {
+                    if (subscribe)
+                        App.prefs.updateData { it.copy(subscribedTopics = it.subscribedTopics + topic) }
+                    else
+                        App.prefs.updateData { it.copy(subscribedTopics = it.subscribedTopics - topic) }
+                }
+            }
+        }
+}
+
+
+@Composable
+private fun LabelledCheckbox(name: String, checked: Boolean, onCheckedChanged: (Boolean) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .height(56.dp)
             .toggleable(
-                value = checkedState,
+                value = checked,
                 onValueChange = {
-                    onStateChange(!checkedState)
-
-                    App.prefs.sharedPreferences
-                        .edit()
-                        .putBoolean("subscribed_to_$name", it)
-                        .apply()
-                    if (it) {
-                        Firebase.messaging.subscribeToTopic(name)
-                    } else {
-                        Firebase.messaging.unsubscribeFromTopic(name)
-                    }
+                    onCheckedChanged(it)
                 },
                 role = Role.Checkbox
             )
@@ -129,7 +131,7 @@ fun LabelledCheckbox(name: String) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(
-            checked = checkedState,
+            checked = checked,
             onCheckedChange = null // null recommended for accessibility with screenreaders
         )
         Text(
@@ -138,21 +140,4 @@ fun LabelledCheckbox(name: String) {
             modifier = Modifier.padding(start = 16.dp)
         )
     }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    SensorboxTheme {
-        Greeting("Android")
-    }
-
 }

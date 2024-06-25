@@ -64,7 +64,6 @@ fun SensorboxTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
         content = content
     )
 }

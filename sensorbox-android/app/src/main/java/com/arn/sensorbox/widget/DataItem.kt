@@ -5,28 +5,58 @@ data class DataItem(
     val value: Float,
     val unit: String,
     val emoji: String,
+)
+
+data class DataItems(
+    val suffix: String,
+    val timestamp: Long,
+    val items: List<DataItem>,
 ) {
-
     companion object {
-        fun createFrom(sensorBoxData: SensorBoxData): List<DataItem> {
-            val dataItems = mutableListOf<DataItem>()
 
-            dataItems +=  DataItem(sensorBoxData::temperature.name, sensorBoxData.temperature, "°C", "🌡️")
-            dataItems +=  DataItem(sensorBoxData::temperature.name, ListDataUtils.heatIndex(sensorBoxData.temperature, sensorBoxData.humidity), "°C", "🌡️f")
-            dataItems +=  DataItem(sensorBoxData::humidity.name, sensorBoxData.humidity, "%", "💧")
-            dataItems +=  DataItem(sensorBoxData::pressure.name, ListDataUtils.seaPressure(sensorBoxData.pressure, sensorBoxData.temperature), "hPa", "⛅s")
-            dataItems +=  DataItem(sensorBoxData::luminosity.name, sensorBoxData.luminosity, "lux",  "☀")
-            dataItems +=  DataItem(sensorBoxData::soundDbA.name, sensorBoxData.soundDbA, "dB",  "📢")
-            dataItems +=  DataItem(sensorBoxData::pm25.name, sensorBoxData.pm25, "μg/m³",  "💨₂.₅")
-            dataItems +=  DataItem(sensorBoxData::pm10.name, sensorBoxData.pm10, "μg/m³",  "💨₁₀")
-            dataItems +=  DataItem(sensorBoxData::roomTemperature.name, sensorBoxData.roomTemperature, "°C", "🌡️r")
-            dataItems +=  DataItem(sensorBoxData::roomTemperature.name, ListDataUtils.heatIndex(sensorBoxData.roomTemperature, sensorBoxData.roomHumidity), "°C", "🌡️rf")
-            dataItems +=  DataItem(sensorBoxData::roomHumidity.name, sensorBoxData.roomHumidity, "%", "💧r")
-            dataItems +=  DataItem(sensorBoxData::voc.name, sensorBoxData.voc, "ppm",  "☣️r")
-            dataItems +=  DataItem(sensorBoxData::voltageAvg.name, sensorBoxData.voltageAvg, "V",  "🔋")
+        fun SensorBoxData.toDataItems() = listOf(
+            DataItems(
+                suffix = "",
+                timestamp = timestampFirst,
+                items = listOf(
+                    DataItem(::temperature.name, temperature, "°C", "🌡️"),
+                    DataItem(
+                        ::temperature.name,
+                        ReadingsUtils.heatIndex(temperature, humidity),
+                        "°C",
+                        "🌡️f"
+                    ),
+                    DataItem(::humidity.name, humidity, "%", "💧"),
+                    DataItem(
+                        ::pressure.name,
+                        ReadingsUtils.seaPressure(pressure, temperature),
+                        "hPa",
+                        "⛅s"
+                    ),
+                    DataItem(::luminosity.name, luminosity, "lux", "☀"),
+                    DataItem(::soundDbA.name, soundDbA, "dB", "📢"),
+                    DataItem(::pm25.name, pm25, "μg/m³", "🌫️₂.₅"),
+                    DataItem(::pm10.name, pm10, "μg/m³", "🌫️₁₀"),
+                    DataItem(::co2.name, co2, "ppm", "💨"),
+                    DataItem(::voltageAvg.name, voltageAvg, "V", "🔋"),
 
-            return dataItems
-        }
-
+                    )
+            ),
+            DataItems(
+                suffix = "r",
+                timestamp = timestampSecond,
+                items = listOf(
+                    DataItem(::roomTemperature.name, roomTemperature, "°C", "🌡️"),
+                    DataItem(
+                        ::roomTemperature.name,
+                        ReadingsUtils.heatIndex(roomTemperature, roomHumidity),
+                        "°C",
+                        "🌡️f"
+                    ),
+                    DataItem(::roomHumidity.name, roomHumidity, "%", "💧"),
+                    DataItem(::roomVoltageAvg.name, roomVoltageAvg, "V", "🔋"),
+                )
+            )
+        )
     }
 }

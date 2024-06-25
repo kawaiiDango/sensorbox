@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import asyncio
 import logging
 import math
@@ -49,72 +51,6 @@ def fcm_q_message(topic, payload_dict):
     )
 
 
-class PrefsResource(ObservableResource):
-    def __init__(self):
-        super().__init__()
-
-    def read_prefs(self, topic_prefix):
-        try:
-            with open(f"prefs/{topic_prefix}.cbor", "rb") as f:
-                return cbor2.load(f)
-        except (cbor2.CBORDecodeEOF, cbor2.CBORDecodeError, FileNotFoundError):
-            return None
-
-    def write_prefs(self, topic_prefix, data):
-        try:
-            with open(f"prefs/{topic_prefix}.cbor", "wb") as f:
-                cbor2.dump(data, f)
-        except cbor2.CBORDecodeError:
-            logging.error("Invalid CBOR payload")
-
-    async def render_get(self, request: aiocoap.Message):
-        uri = request.get_request_uri()
-        existing_data = self.read_prefs(uri_first_path(uri))
-
-        if existing_data is None:
-            existing_prefs_bytes = b""
-        else:
-            existing_prefs_bytes = cbor2.dumps(existing_data)
-
-        return aiocoap.Message(
-            payload=existing_prefs_bytes,
-            content_format=ContentFormat.CBOR,
-            code=aiocoap.message.Code.CONTENT,
-        )
-
-    async def render_post(self, request: aiocoap.Message):
-        uri = request.get_request_uri()
-
-        new_payload = cbor2.loads(request.payload)
-        new_timestamp = new_payload["lastChangedS"]
-
-        existing_data = self.read_prefs(uri_first_path(uri))
-
-        if existing_data is None:
-            existing_timestamp = 0
-        else:
-            existing_timestamp = existing_data["lastChangedS"]
-
-        logging.info(
-            f"existing_timestamp {datetime.datetime.fromtimestamp(existing_timestamp)}"
-        )
-        logging.info(f"new_timestamp {datetime.datetime.fromtimestamp(new_timestamp)}")
-
-        if new_timestamp > existing_timestamp:
-            self.write_prefs(uri_first_path(uri), new_payload)
-            self.updated_state()
-            return aiocoap.Message(
-                payload="Server prefs changed".encode("UTF-8"),
-                code=aiocoap.message.Code.CHANGED,
-            )
-        else:
-            return aiocoap.Message(
-                payload=cbor2.dumps(existing_data),
-                content_format=ContentFormat.CBOR,
-                code=aiocoap.message.Code.CONTENT,
-            )
-
-
 class ReadingsResource(Resource):
     def __init__(self):
         super().__init__()
@@ -137,7 +73,7 @@ class ReadingsResource(Resource):
 
         for key, value in data.items():
             if key != "timestamp" and key != "audioFft":
-                if value != -1 and not math.isnan(value):
+                if value and value != -1 and not math.isnan(value):
                     val = round(value, 6)
                     point.field(key, val)
         logging.info(point)
@@ -211,7 +147,6 @@ async def main(write_api_p):
     root = aiocoap.resource.Site()
 
     for device_name in consts.device_names:
-        root.add_resource([device_name, "prefs"], PrefsResource())
         root.add_resource([device_name, "data"], ReadingsResource())
 
     root.add_resource(["time"], TimeResource())

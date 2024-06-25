@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <DNSServer.h>
+#include <ESPmDNS.h>
 #include <WiFi.h>
 #include <prefs.h>
 #include <my_utils.h>
@@ -71,7 +72,7 @@ esp_err_t root_get_handler(httpd_req_t *req)
     sprintf(num_buf, "%u", prefs.pmSensorEvery);
     send_input_field(req, PREF_PM_SENSOR_EVERY, "number", num_buf, true);
     httpd_resp_sendstr_chunk(req, "<br>");
-    sprintf(num_buf, "%u", prefs.timezoneOffsetS);
+    sprintf(num_buf, "%d", prefs.timezoneOffsetS);
     send_input_field(req, PREF_TIMEZONE_OFFSET_S, "number", num_buf, true);
     send_input_field(req, NAME_TIMESTAMP, "number", "0", true);
     httpd_resp_sendstr_chunk(req, "<br>");
@@ -312,14 +313,14 @@ esp_err_t start_server(int port)
 
     httpd_register_uri_handler(http_server, &_delete_readings_post_handler);
 
-    // 404 handler
-    httpd_uri_t _404_handler = {
+    // 302 handler
+    httpd_uri_t _catch_all_handler = {
         .uri = "/*",
         .method = HTTP_GET,
         .handler = catch_all_handler,
         .user_ctx = NULL,
     };
-    httpd_register_uri_handler(http_server, &_404_handler);
+    httpd_register_uri_handler(http_server, &_catch_all_handler);
 
     return ESP_OK;
 }
@@ -336,8 +337,27 @@ void apModeLoop()
     frb.begin();
 
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(prefs.uriPrefix, "sensorBox321");
-    dnsServer.start(53, "*", WiFi.softAPIP());
+
+    boolean result = WiFi.softAP(prefs.uriPrefix, "sensorBox321");
+
+    if (!result)
+    {
+        Serial.println("AP mode failed to start");
+        return;
+    }
+
+    WiFi.setTxPower(WIFI_POWER_2dBm);
+
+    result = dnsServer.start(53, "*", WiFi.softAPIP());
+
+    if (!result)
+    {
+        Serial.println("DNS server failed to start");
+        return;
+    }
+
+    MDNS.begin(prefs.uriPrefix);
+
     start_server(80);
 
     Serial.println("AP mode started");

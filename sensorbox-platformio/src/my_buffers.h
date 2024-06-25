@@ -4,13 +4,13 @@
 #include <my_utils.h>
 
 #ifdef THE_BOX
-#define READINGS_NUM_FIELDS 15
+#define READINGS_NUM_FIELDS 16
 #else
 // #define READINGS_BUFFER_SIZE 170
 #define READINGS_NUM_FIELDS 7
 #endif
 #define PQ_SIZE 6
-#define READINGS_BUFFER_SIZE 50
+#define READINGS_BUFFER_SIZE 48
 
 struct Readings
 {
@@ -24,18 +24,18 @@ struct Readings
   float luminosity;
   float pm25;
   float pm10;
-  float voltageAvg;
+  short co2;
   float soundDbA;
   uint8_t audioFft[106];
 #else
   float voc;
-  float boardTemperature;
 #endif
 
   float temperature;
   float humidity;
   float freeHeap;
-  float awakeTime;
+  short awakeTime;
+  float voltageAvg;
 };
 
 typedef struct Readings Readings;
@@ -51,7 +51,7 @@ Readings invalidReadings = {
     .luminosity = NAN,
     .pm25 = NAN,
     .pm10 = NAN,
-    .voltageAvg = NAN,
+    .co2 = -1,
     .soundDbA = NAN,
     .audioFft = {0},
 #else
@@ -61,7 +61,8 @@ Readings invalidReadings = {
     .temperature = NAN,
     .humidity = NAN,
     .freeHeap = NAN,
-    .awakeTime = NAN,
+    .awakeTime = -1,
+    .voltageAvg = NAN,
 };
 
 struct ReadingsBuffer

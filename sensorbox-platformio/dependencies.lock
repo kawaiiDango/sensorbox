@@ -1,16 +1,39 @@
 dependencies:
-  esp_littlefs:
-    component_hash: 460aceed511b28eda2c2e4e01205ac31ebf01403ab91e05ffdb5979f81125658
+  espressif/cbor:
+    component_hash: 440f4ee4504841cc9b4f3a8ef755776a612ac9dace355514c68b999868f990ff
     source:
-      git: https://github.com/joltwallet/esp_littlefs.git
-      path: .
-      type: git
-    version: 235e78117f6487fc696645e23b261e982f7b5d2a
+      type: service
+    version: 0.6.0~1
+  espressif/coap:
+    component_hash: b76d3b92424c55629509e60066d0d87cdd10f8f6272f1314f81ffd443de601b6
+    source:
+      type: service
+    version: 4.3.4~3
+  espressif/esp-dsp:
+    component_hash: 3e7bbd487f1357a1d4944d0c85966d049501ea281b8a4c7f93f7cfedd5b7f23d
+    source:
+      type: service
+    version: 1.4.12
+  espressif/esp_modem:
+    component_hash: e48da33fee082dd9d9a97a354a228057e07a14ac108766b40ad84e018205410a
+    source:
+      type: service
+    version: 1.1.0
+  espressif/mdns:
+    component_hash: 31117d76cae83a6d83ffd7f035f6fdae5bd05b914fc30b641afeb208b84de19a
+    source:
+      type: service
+    version: 1.3.2
   idf:
     component_hash: null
     source:
       type: idf
-    version: 4.4.6
-manifest_hash: 4b13ff241ec4d36ca2303b885c7088c32d74d090ef8e0ca6ea4c7d53047011d6
+    version: 5.1.4
+  joltwallet/littlefs:
+    component_hash: 82fe9d7d57b5b95d29532aec744f3cfdf9ae1775ac0ca52ac61fc6dd7cf53dba
+    source:
+      type: service
+    version: 1.14.6
+manifest_hash: bb7ebbac86cd00264df4d750b2ccd079e508195135317fa5cb6ba9ce90535b92
 target: esp32
 version: 1.0.0

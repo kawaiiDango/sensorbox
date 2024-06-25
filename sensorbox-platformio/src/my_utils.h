@@ -5,7 +5,7 @@
 
 #define THE_BOX
 #define ENABLE_LOW_BATTERY_SHUTDOWN
-#define PRINT_CBOR false
+// #define PRINT_CBOR
 
 #define BUTTON_PIN 27
 #define DEBUG_BAUD_RATE 115200

@@ -1,28 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:theme="@style/AppWidgetTheme.Dynamic">
+    android:theme="@style/Theme.Material3.DynamicColors.DayNight">
 
     <ImageView
         android:id="@+id/widget_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/widget_bg_shape"
-        android:alpha="0.4"/>
+        android:alpha="0.65"
+        android:background="@drawable/widget_bg_shape" />
 
+    <!--    https://stackoverflow.com/questions/17945498/how-set-listview-not-clickable -->
     <ListView
         android:id="@+id/data_list"
-        android:divider="@android:color/transparent"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+        android:layout_height="match_parent"
+        android:divider="@android:color/transparent"
+        android:listSelector="@android:color/transparent" />
 
     <TextView
         android:id="@+id/no_data"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:text="No data"
-        />
+        android:text="@string/no_data"
+        android:textColor="?attr/colorOnPrimaryContainer" />
 
 </FrameLayout>

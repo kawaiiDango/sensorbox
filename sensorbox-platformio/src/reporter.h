@@ -31,9 +31,11 @@ std::map<coap_mid_t, Readings *> coapMessagesSent;
 coap_context_t *coap_ctx = NULL;
 coap_session_t *coap_session = NULL;
 bool coap_loop_running = false;
-QueueHandle_t coap_pdu_queue = xQueueCreate(5, sizeof(struct coap_meta));
+QueueHandle_t coap_pdu_queue = xQueueCreate(4, sizeof(struct coap_meta));
 SemaphoreHandle_t coap_loop_semaphore = xSemaphoreCreateBinary();
 SemaphoreHandle_t coap_prepare_semaphore = xSemaphoreCreateBinary();
+
+void coap_client_cleanup();
 
 bool frb_save_from_rtc(bool force = false)
 {
@@ -76,10 +78,10 @@ inline bool coap_is_active()
     return millis() - coap_last_active_time < COAP_TIMEOUT;
 }
 
-static coap_response_t message_handler(coap_session_t *session,
-                                       const coap_pdu_t *sent,
-                                       const coap_pdu_t *received,
-                                       const coap_mid_t mid)
+coap_response_t message_handler(coap_session_t *session,
+                                const coap_pdu_t *sent,
+                                const coap_pdu_t *received,
+                                const coap_mid_t mid)
 {
     const unsigned char *data = NULL;
     size_t data_len;
@@ -103,174 +105,12 @@ static coap_response_t message_handler(coap_session_t *session,
             }
         }
     }
-    else if (rcvd_code == COAP_RESPONSE_CODE_CONTENT) // prefs received
-    {
-        if (coap_get_data_large(received, &data_len, &data, &offset, &total))
-        {
-            if (data_len != total)
-                printf("Unexpected partial data received offset %u, length %u\n", offset, data_len);
-
-            if (data_len > 100)
-            {
-                Serial.println("saving prefs");
-                cborToPrefsSave(data, data_len);
-            }
-        }
-    }
 
     return COAP_RESPONSE_OK;
 }
 
-static coap_address_t *coap_get_address(coap_uri_t *uri)
-{
-    static coap_address_t dst_addr;
-    char *phostname = NULL;
-    struct addrinfo hints;
-    struct addrinfo *addrres;
-    int error;
-    char tmpbuf[INET6_ADDRSTRLEN];
-    struct sockaddr_in host_addr;
-    struct sockaddr_in6 host_addr6;
-
-    phostname = (char *)calloc(1, uri->host.length + 1);
-    if (phostname == NULL)
-    {
-        ESP_LOGE(TAG_REPORTER, "calloc failed");
-        return NULL;
-    }
-    memcpy(phostname, uri->host.s, uri->host.length);
-    phostname[uri->host.length] = '\0';
-
-    // check if host is IP address
-    if (inet_pton(AF_INET, phostname, &host_addr.sin_addr) == 1)
-    {
-        coap_address_init(&dst_addr);
-
-        host_addr.sin_family = AF_INET;
-        host_addr.sin_port = htons(uri->port);
-        memcpy(&dst_addr.addr.sin, &host_addr, sizeof(host_addr));
-        inet_ntop(AF_INET, &dst_addr.addr.sin.sin_addr, tmpbuf, sizeof(tmpbuf));
-        ESP_LOGI(TAG_REPORTER, "Host is IPv4. IP=%s", tmpbuf);
-        free(phostname);
-        return &dst_addr;
-    }
-    else if (inet_pton(AF_INET6, phostname, &host_addr6.sin6_addr) == 1)
-    {
-        coap_address_init(&dst_addr);
-
-        host_addr6.sin6_family = AF_INET6;
-        host_addr6.sin6_port = htons(uri->port);
-        memcpy(&dst_addr.addr.sin6, &host_addr6, sizeof(host_addr6));
-        inet_ntop(AF_INET6, &dst_addr.addr.sin6.sin6_addr, tmpbuf, sizeof(tmpbuf));
-        ESP_LOGI(TAG_REPORTER, "Host is IPv6. IP=%s", tmpbuf);
-        free(phostname);
-        return &dst_addr;
-    }
-
-    memset((char *)&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_family = AF_UNSPEC;
-
-    error = getaddrinfo(phostname, NULL, &hints, &addrres);
-    if (error != 0)
-    {
-        ESP_LOGE(TAG_REPORTER, "DNS lookup failed for destination address %s. error: %d", phostname, error);
-        free(phostname);
-        return NULL;
-    }
-    if (addrres == NULL)
-    {
-        ESP_LOGE(TAG_REPORTER, "DNS lookup %s did not return any addresses", phostname);
-        free(phostname);
-        return NULL;
-    }
-    free(phostname);
-    coap_address_init(&dst_addr);
-    switch (addrres->ai_family)
-    {
-    case AF_INET:
-        memcpy(&dst_addr.addr.sin, addrres->ai_addr, sizeof(dst_addr.addr.sin));
-        dst_addr.addr.sin.sin_port = htons(uri->port);
-        inet_ntop(AF_INET, &dst_addr.addr.sin.sin_addr, tmpbuf, sizeof(tmpbuf));
-        ESP_LOGI(TAG_REPORTER, "DNS lookup succeeded. IP=%s", tmpbuf);
-        break;
-    case AF_INET6:
-        memcpy(&dst_addr.addr.sin6, addrres->ai_addr, sizeof(dst_addr.addr.sin6));
-        dst_addr.addr.sin6.sin6_port = htons(uri->port);
-        inet_ntop(AF_INET6, &dst_addr.addr.sin6.sin6_addr, tmpbuf, sizeof(tmpbuf));
-        ESP_LOGI(TAG_REPORTER, "DNS lookup succeeded. IP=%s", tmpbuf);
-        break;
-    default:
-        ESP_LOGE(TAG_REPORTER, "DNS lookup response failed");
-        return NULL;
-    }
-    freeaddrinfo(addrres);
-
-    return &dst_addr;
-}
-
-int coap_build_optlist(coap_uri_t *uri, coap_optlist_t **optlist)
-{
-#define BUFSIZE 40
-    unsigned char _buf[40];
-    unsigned char *buf;
-    size_t buflen;
-    int res;
-
-    if (uri->scheme == COAP_URI_SCHEME_COAPS && !coap_dtls_is_supported())
-    {
-        ESP_LOGE(TAG_REPORTER, "MbedTLS DTLS Client Mode not configured");
-        return 0;
-    }
-    if (uri->scheme == COAP_URI_SCHEME_COAPS_TCP && !coap_tls_is_supported())
-    {
-        ESP_LOGE(TAG_REPORTER, "MbedTLS TLS Client Mode not configured");
-        return 0;
-    }
-    if (uri->scheme == COAP_URI_SCHEME_COAP_TCP && !coap_tcp_is_supported())
-    {
-        ESP_LOGE(TAG_REPORTER, "TCP Client Mode not configured");
-        return 0;
-    }
-
-    if (uri->path.length)
-    {
-        buflen = BUFSIZE;
-        buf = _buf;
-        res = coap_split_path(uri->path.s, uri->path.length, buf, &buflen);
-
-        while (res--)
-        {
-            coap_insert_optlist(optlist,
-                                coap_new_optlist(COAP_OPTION_URI_PATH,
-                                                 coap_opt_length(buf),
-                                                 coap_opt_value(buf)));
-
-            buf += coap_opt_size(buf);
-        }
-    }
-
-    if (uri->query.length)
-    {
-        buflen = BUFSIZE;
-        buf = _buf;
-        res = coap_split_query(uri->query.s, uri->query.length, buf, &buflen);
-
-        while (res--)
-        {
-            coap_insert_optlist(optlist,
-                                coap_new_optlist(COAP_OPTION_URI_QUERY,
-                                                 coap_opt_length(buf),
-                                                 coap_opt_value(buf)));
-
-            buf += coap_opt_size(buf);
-        }
-    }
-    return 1;
-}
 #ifdef CONFIG_COAP_MBEDTLS_PSK
-static coap_session_t *
-coap_start_psk_session(coap_context_t *ctx, coap_address_t *dst_addr, coap_uri_t *uri)
+coap_session_t *coap_start_psk_session(coap_context_t *ctx, coap_address_t *dst_addr, coap_uri_t *uri, coap_proto_t proto)
 {
     static coap_dtls_cpsk_t dtls_psk;
     static char client_sni[256];
@@ -281,35 +121,29 @@ coap_start_psk_session(coap_context_t *ctx, coap_address_t *dst_addr, coap_uri_t
     dtls_psk.validate_ih_call_back = NULL;
     dtls_psk.ih_call_back_arg = NULL;
     if (uri->host.length)
+    {
         memcpy(client_sni, uri->host.s, min(uri->host.length, sizeof(client_sni) - 1));
+    }
     else
+    {
         memcpy(client_sni, "localhost", 9);
+    }
     dtls_psk.client_sni = client_sni;
+
     dtls_psk.psk_info.identity.s = (const uint8_t *)prefs.coapDtlsId;
     dtls_psk.psk_info.identity.length = strlen(prefs.coapDtlsId);
     dtls_psk.psk_info.key.s = (const uint8_t *)prefs.coapDtlsPsk;
     dtls_psk.psk_info.key.length = strlen(prefs.coapDtlsPsk);
-    return coap_new_client_session_psk2(ctx, NULL, dst_addr,
-                                        uri->scheme == COAP_URI_SCHEME_COAPS ? COAP_PROTO_DTLS : COAP_PROTO_TLS,
+
+#ifdef CONFIG_COAP_OSCORE_SUPPORT
+    return coap_new_client_session_oscore_psk(ctx, NULL, dst_addr, proto,
+                                              &dtls_psk, oscore_conf);
+#else  /* ! CONFIG_COAP_OSCORE_SUPPORT */
+    return coap_new_client_session_psk2(ctx, NULL, dst_addr, proto,
                                         &dtls_psk);
+#endif /* ! CONFIG_COAP_OSCORE_SUPPORT */
 }
 #endif /* CONFIG_COAP_MBEDTLS_PSK */
-
-void coap_create_uri(const char *path, coap_uri_t *uri, coap_optlist_t **optlist)
-{
-    String uri_str = String("coap") + ((strlen(prefs.coapDtlsId) == 0 || strlen(prefs.coapDtlsPsk) == 0) ? "" : "s") + "://" + prefs.coapHost + ":" + prefs.coapPort + "/" + path;
-
-    if (coap_split_uri((const uint8_t *)uri_str.c_str(), uri_str.length(), uri) == -1)
-    {
-        ESP_LOGE(TAG_REPORTER, "CoAP server uri error");
-        return;
-    }
-
-    if (optlist != NULL && !coap_build_optlist(uri, optlist))
-    {
-        ESP_LOGE(TAG_REPORTER, "coap_build_optlist failed");
-    }
-}
 
 size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
 {
@@ -347,16 +181,17 @@ size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
     error |= cbor_encode_text_stringz(&map_encoder, "pm10");
     error |= cbor_encode_float(&map_encoder, readings->pm10);
 
-    error |= cbor_encode_text_stringz(&map_encoder, "voltageAvg");
-    error |= cbor_encode_float(&map_encoder, readings->voltageAvg);
-
     error |= cbor_encode_text_stringz(&map_encoder, "soundDbA");
     error |= cbor_encode_float(&map_encoder, readings->soundDbA);
+
+    error |= cbor_encode_text_stringz(&map_encoder, "co2");
+    error |= cbor_encode_int(&map_encoder, readings->co2);
 
     error |= cbor_encode_text_stringz(&map_encoder, "audioFft");
     error |= cbor_encode_byte_string(&map_encoder, readings->audioFft, NUM_FFT_BINS);
 
 #else
+
     error |= cbor_encode_text_stringz(&map_encoder, "voc");
     error |= cbor_encode_float(&map_encoder, readings->voc);
 
@@ -373,8 +208,14 @@ size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
     error |= cbor_encode_text_stringz(&map_encoder, "freeHeap");
     error |= cbor_encode_float(&map_encoder, readings->freeHeap);
 
+    error |= cbor_encode_text_stringz(&map_encoder, "voltageAvg");
+    error |= cbor_encode_float(&map_encoder, readings->voltageAvg);
+
     error |= cbor_encode_text_stringz(&map_encoder, "awakeTime");
-    error |= cbor_encode_float(&map_encoder, readings->awakeTime);
+    if (readings->awakeTime < 0)
+        error |= cbor_encode_float(&map_encoder, NAN);
+    else
+        error |= cbor_encode_float(&map_encoder, (float)readings->awakeTime);
 
     error |= cbor_encoder_close_container(&root_encoder, &map_encoder);
 
@@ -394,18 +235,27 @@ size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
     if (encoded_size > 500)
         printf("Encoded size: %zu\n", encoded_size);
 
-#if PRINT_CBOR
+#ifdef PRINT_CBOR
     printCbor(buffer, encoded_size);
 #endif
 
     return encoded_size;
 }
 
+void create_coap_uri(char *uri_str, const char *path)
+{
+    sprintf(uri_str, "coap%s://%s:%u/%s", (strlen(prefs.coapDtlsId) == 0 || strlen(prefs.coapDtlsPsk) == 0) ? "" : "s", prefs.coapHost, prefs.coapPort, path);
+}
+
 void coapPrepareClient()
 {
-    coap_address_t *dst_addr = NULL;
-    coap_uri_t uri = {};
+    coap_address_t dst_addr;
+    char uri_str[40];
+    coap_uri_t uri;
+    coap_addr_info_t *info_list = NULL;
+    coap_proto_t proto;
 
+    coap_startup();
     /* Set up the CoAP context */
     coap_ctx = coap_new_context(NULL);
     if (!coap_ctx)
@@ -418,13 +268,29 @@ void coapPrepareClient()
 
     coap_register_response_handler(coap_ctx, message_handler);
 
-    coap_create_uri("test", &uri, NULL);
+    create_coap_uri(uri_str, "");
 
-    dst_addr = coap_get_address(&uri);
-    if (!dst_addr)
+    if (coap_split_uri((const uint8_t *)uri_str, strlen(uri_str), &uri) == -1)
     {
+        ESP_LOGE(TAG_REPORTER, "CoAP uri error");
         goto finish;
     }
+
+    info_list = coap_resolve_address_info(&uri.host, uri.port, uri.port,
+                                          uri.port, uri.port,
+                                          0,
+                                          1 << uri.scheme,
+                                          COAP_RESOLVE_TYPE_REMOTE);
+
+    if (info_list == NULL)
+    {
+        ESP_LOGE(TAG_REPORTER, "failed to resolve address");
+        goto finish;
+    }
+    memcpy(&dst_addr, &info_list->addr, sizeof(dst_addr));
+    proto = info_list->proto;
+
+    /* Create a new session */
 
     /*
      * Note that if the URI starts with just coap:// (not coaps://) the
@@ -433,26 +299,32 @@ void coapPrepareClient()
     if (uri.scheme == COAP_URI_SCHEME_COAPS || uri.scheme == COAP_URI_SCHEME_COAPS_TCP)
     {
 #ifdef CONFIG_COAP_MBEDTLS_PSK
-        coap_session = coap_start_psk_session(coap_ctx, dst_addr, &uri);
+        coap_session = coap_start_psk_session(coap_ctx, &dst_addr, &uri, proto);
 #endif /* CONFIG_COAP_MBEDTLS_PSK */
     }
     else
     {
-        coap_session = coap_new_client_session(coap_ctx, NULL, dst_addr,
-                                               uri.scheme == COAP_URI_SCHEME_COAP_TCP ? COAP_PROTO_TCP : COAP_PROTO_UDP);
+        coap_session = coap_new_client_session(coap_ctx, NULL, &dst_addr, proto);
     }
     if (!coap_session)
     {
         ESP_LOGE(TAG_REPORTER, "coap_new_client_session() failed");
         goto finish;
     }
+
     coapClientInitialized = true;
 
 finish:
+    coap_free_address_info(info_list);
+
+    if (!coapClientInitialized)
+    {
+        coap_client_cleanup();
+    }
     xSemaphoreGive(coap_prepare_semaphore);
 }
 
-void coapClientCleanup()
+void coap_client_cleanup()
 {
     if (!coapClientInitialized || !coap_ctx)
         return;
@@ -488,20 +360,34 @@ void coapClientCleanup()
         coap_free_context(coap_ctx);
     }
 
+    coap_cleanup();
+
     coapClientInitialized = false;
 }
 
-coap_pdu_t *coap_create_my_pdu(coap_pdu_code_t req_code, coap_optlist_t *optlist, coap_pdu_type_t pdu_type, bool observe = false,
+coap_pdu_t *coap_create_my_pdu(const char *path, coap_pdu_code_t req_code, coap_pdu_type_t pdu_type, bool observe = false,
                                uint8_t *data = NULL, size_t data_len = 0, unsigned int mime = COAP_MEDIATYPE_APPLICATION_CBOR)
 {
     coap_pdu_t *request = NULL;
     size_t tokenlength;
     unsigned char token[8];
     unsigned char buf[4];
+    char uri_str[128];
+    coap_uri_t uri;
+    coap_optlist_t *optlist = NULL;
 
-    coap_insert_optlist(&optlist,
-                        coap_new_optlist(COAP_OPTION_CONTENT_FORMAT,
-                                         coap_encode_var_safe(buf, sizeof(buf), mime), buf));
+    create_coap_uri(uri_str, path);
+    if (coap_split_uri((const uint8_t *)uri_str, strlen(uri_str), &uri) == -1)
+    {
+        ESP_LOGE(TAG_REPORTER, "CoAP server uri %s error", uri_str);
+        return NULL;
+    }
+
+    /* Convert provided uri into CoAP options */
+    if (coap_uri_into_options(&uri, 0, &optlist, 1, (uint8_t *)uri_str, sizeof(uri_str)) < 0)
+    {
+        ESP_LOGE(TAG_REPORTER, "Failed to create options for URI %s", uri_str);
+    }
 
     request = coap_new_pdu(pdu_type, req_code, coap_session);
     if (!request)
@@ -519,9 +405,20 @@ coap_pdu_t *coap_create_my_pdu(coap_pdu_code_t req_code, coap_optlist_t *optlist
     }
 
     if (data_len > 0 && data != NULL)
-        coap_add_data_large_request(coap_session, request, data_len, data, NULL, NULL);
+        coap_insert_optlist(&optlist,
+                            coap_new_optlist(COAP_OPTION_CONTENT_FORMAT,
+                                             coap_encode_var_safe(buf, sizeof(buf), mime), buf));
 
     coap_add_optlist_pdu(request, &optlist);
+
+    if (data_len > 0 && data != NULL)
+        coap_add_data_large_request(coap_session, request, data_len, data, NULL, NULL);
+
+    if (optlist)
+    {
+        coap_delete_optlist(optlist);
+        optlist = NULL;
+    }
 
     return request;
 }
@@ -567,53 +464,21 @@ void coap_io_loop(void *arg)
     }
 
 finish:
-    coapClientCleanup();
+    coap_client_cleanup();
     xSemaphoreGive(coap_loop_semaphore);
     vTaskDelete(NULL);
 }
 
-bool coap_client_sync_prefs()
-{
-    coap_uri_t uri;
-    coap_pdu_t *request = NULL;
-    coap_optlist_t *optlist = NULL;
-    char pathbuf_small[50];
-    uint8_t databuf_big[512];
-
-    sprintf(pathbuf_small, "%s/prefs", prefs.uriPrefix);
-    return true;
-
-    coap_create_uri(pathbuf_small, &uri, &optlist);
-
-    size_t data_len = prefsToCbor(databuf_big);
-    request = coap_create_my_pdu(COAP_REQUEST_CODE_POST, optlist, COAP_MESSAGE_CON, false, databuf_big, data_len);
-
-    if (!request)
-    {
-        ESP_LOGE(TAG_REPORTER, "coap_create_my_pdu failed");
-        return false;
-    }
-
-    struct coap_meta meta = {request, NULL};
-
-    xQueueSend(coap_pdu_queue, &meta, portMAX_DELAY);
-
-    return true;
-}
-
 void coap_readings_report_loop(void *arg)
 {
-    coap_optlist_t *optlist = NULL;
+    // coap_optlist_t *optlist = NULL;
     size_t data_len;
     Readings *readings = NULL;
     coap_pdu_t *request = NULL;
-    coap_uri_t uri;
+    // coap_uri_t uri;
     Readings *entries = NULL;
     char pathbuf_small[50];
     uint8_t databuf_big[512];
-
-    if (coapClientInitialized && wasTouchpadWakeup && prefs.lastChangedS > APR_20_2023_S)
-        coap_client_sync_prefs();
 
     frb.beginPrefs();
 
@@ -629,7 +494,6 @@ void coap_readings_report_loop(void *arg)
 
     while (coapClientInitialized && coap_is_active() && (coap_loop_running || readings != NULL || (frb_inited && frb.size() > 0)))
     {
-        optlist = NULL;
         readings = readingsBufferPop(&readingsBuffer);
         if (readings == NULL)
         {
@@ -667,8 +531,8 @@ void coap_readings_report_loop(void *arg)
 
         sprintf(pathbuf_small, "%s/data", prefs.uriPrefix);
 
-        coap_create_uri(pathbuf_small, &uri, &optlist);
-        request = coap_create_my_pdu(COAP_REQUEST_CODE_PUT, optlist, COAP_MESSAGE_NON, false, databuf_big, data_len);
+        // coap_create_uri(pathbuf_small, &uri, &optlist);
+        request = coap_create_my_pdu(pathbuf_small, COAP_REQUEST_CODE_PUT, COAP_MESSAGE_NON, false, databuf_big, data_len);
         if (!request)
         {
             ESP_LOGE(TAG_REPORTER, "coap_create_my_pdu failed");

@@ -3,21 +3,28 @@ package com.arn.sensorbox.widget
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.util.Log
 import android.widget.RemoteViews
-import androidx.core.widget.RemoteViewsCompat
-import com.arn.sensorbox.MyPrefs
+import com.arn.sensorbox.App
 import com.arn.sensorbox.R
+import com.arn.sensorbox.widget.DataItems.Companion.toDataItems
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 
+// glance uses workmanager and is subject to its background limits, so do not migrate
 
 class ReadingsWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
-        appWidgetIds: IntArray
+        appWidgetIds: IntArray,
     ) {
         // There may be multiple widgets active, so update all of them
+        val sensorBoxData = runBlocking { App.prefs.data.map { it.cachedData }.first() }
+
         appWidgetIds.forEach { appWidgetId ->
-            updateAppWidget(context, appWidgetManager, appWidgetId)
+            updateAppWidget(context, appWidgetManager, appWidgetId, sensorBoxData)
         }
     }
 
@@ -30,27 +37,32 @@ internal fun updateAppWidget(
     context: Context,
     appWidgetManager: AppWidgetManager,
     appWidgetId: Int,
+    sensorBoxData: SensorBoxData,
 ) {
-    val prefs = MyPrefs()
-    val cachedData = prefs.cachedData
     val rv = RemoteViews(context.packageName, R.layout.appwidget_readings)
 
-    val items = RemoteViewsCompat.RemoteCollectionItems.Builder().apply {
+    val items = RemoteViews.RemoteCollectionItems.Builder().apply {
         setHasStableIds(true)
         setViewTypeCount(2)
-        addItem(0, ListDataUtils.createHeader(cachedData.timestamp))
 
-        DataItem.createFrom(cachedData)
-            .forEachIndexed { i, item ->
-                addItem(item.hashCode().toLong(), ListDataUtils.createDataItem(item))
+        sensorBoxData.toDataItems().forEach { dataItems ->
+            addItem(
+                dataItems.suffix.hashCode().toLong(),
+                ListDataUtils.createHeader(dataItems.timestamp)
+            )
+            dataItems.items.forEach { item ->
+                addItem(
+                    item.hashCode().toLong(),
+                    ListDataUtils.createDataItem(dataItems.suffix, item)
+                )
             }
+        }
     }.build()
-    RemoteViewsCompat.setRemoteAdapter(context, rv, appWidgetId, R.id.data_list, items)
 
     // The empty view is displayed when the collection has no items. It should be a sibling
     // of the collection view.
     rv.setEmptyView(R.id.data_list, R.id.no_data)
-
+    rv.setRemoteAdapter(R.id.data_list, items)
     // Instruct the widget manager to update the widget
     appWidgetManager.updateAppWidget(appWidgetId, rv)
 }

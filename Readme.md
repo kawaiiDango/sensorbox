@@ -7,9 +7,9 @@ I took a bunch of sensors and shoved them into a box.
 - Firebeetle 2 ESP32 board
 - 3 x 18650 batteries in parallel and a holder for them
 - TSL2591 ambient light sensor
-- DHT20 temperature and humidity sensor
+- DHT20 / SHT41 temperature and humidity sensor
 - BMP280 or HW-611 pressure sensor
-- AGS01DB VOC sensor (to a different ESP32 not powered by battery because of high power requirements)
+- SCD41 CO2 sensor
 - SDS018 particulate matter sensor
 - INMP441 microphone
 - HC-SR501 PIR motion sensor
@@ -103,7 +103,7 @@ The CoAP server receives the measurements from the ESP32 and pushes them into In
 
 The server can send alerts to the android app using FCM using topics the user has subscribed to, from the app.
 
-It currently uses topics for: the widget, daily digests and one forfor granafa alerts.
+It currently uses topics for: the widget, daily digests and one for Grafana alerts.
 
 ## Credits
 

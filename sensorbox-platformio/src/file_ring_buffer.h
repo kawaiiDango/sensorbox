@@ -347,7 +347,7 @@ public:
             }
 
             // Print the file name, size, and last modified date
-            Serial.printf("%s (%d bytes, last modified %ld)\n", entry.name(), entry.size(), entry.getLastWrite());
+            Serial.printf("%s (%d bytes, last modified %lld)\n", entry.name(), entry.size(), entry.getLastWrite());
 
             entry.close();
         }

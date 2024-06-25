@@ -1,39 +1,31 @@
 [versions]
-com-android-application = "8.3.0-alpha14"
-core-remoteviews = "1.0.0"
-datastore-preferences = "1.1.0-alpha06"
-google-services = "4.4.0"
-harmony = "1.2.4"
-kotlin = "1.8.20"
-kotlinx-serialization-json = "1.6.1"
-krate = "2.0.0"
-material = "1.10.0"
-core-ktx = "1.12.0"
+com-android-application = "8.6.0-alpha08"
+compose-compiler-android = "1.5.14"
+datastore = "1.1.1"
+google-services = "4.4.2"
+kotlin = "2.0.0"
+kotlinx-serialization-json = "1.7.1"
+core-ktx = "1.14.0-alpha01"
 junit = "4.13.2"
-androidx-test-ext-junit = "1.1.5"
-espresso-core = "3.5.1"
-lifecycle-runtime-ktx = "2.6.2"
-activity-compose = "1.8.0"
-compose-bom = "2023.10.01"
-firebase-bom = "32.6.0"
+androidx-test-ext-junit = "1.2.1"
+espresso-core = "3.6.1"
+activity-compose = "1.9.0"
+compose-bom = "2024.06.00"
+firebase-bom = "33.1.1"
+material = "1.12.0"
 
 [libraries]
-androidx-core-remoteviews = { module = "androidx.core:core-remoteviews", version.ref = "core-remoteviews" }
-androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore-preferences" }
+androidx-datastore-core = { module = "androidx.datastore:datastore-core", version.ref = "datastore" }
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
 google-services = { module = "com.google.gms:google-services", version.ref = "google-services" }
-harmony = { module = "com.frybits.harmony:harmony", version.ref = "harmony" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-ext-junit" }
 espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso-core" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
-krate = { module = "hu.autsoft:krate", version.ref = "krate" }
-krate-kotlinx = { module = "hu.autsoft:krate-kotlinx", version.ref = "krate" }
-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle-runtime-ktx" }
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
-material = { module = "com.google.android.material:material", version.ref = "material" }
+views-material = { module = "com.google.android.material:material", version.ref = "material" }
 ui = { group = "androidx.compose.ui", name = "ui" }
 ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
@@ -42,11 +34,12 @@ ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 material3 = { group = "androidx.compose.material3", name = "material3" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
-firebase-messaging-ktx = { group = "com.google.firebase", name = "firebase-messaging-ktx" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 
 [plugins]
 com-android-application = { id = "com.android.application", version.ref = "com-android-application" }
 org-jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }
 

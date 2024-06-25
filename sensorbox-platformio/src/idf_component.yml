@@ -1,9 +1,10 @@
 dependencies:
   # Required IDF version
-  idf: ">=4.4"
+  idf: ">=5.1"
 
-  esp_littlefs:
-    git: https://github.com/joltwallet/esp_littlefs.git
+  cbor: "^0.6.0"
+  coap: "^4.3.4"
+  esp-dsp: "^1.4.12"
 
   # nghttp: "^1.50.0"
   # esp_jpeg: "^1.0.4"

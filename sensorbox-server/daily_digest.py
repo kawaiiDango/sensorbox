@@ -64,6 +64,12 @@ queries_partial = {
     |> filter(fn: (r) => r["_field"] == "pm10")
     |> drop(columns: ["topic", "_measurement", "bucket"])
     """,
+    "co2": f"""from(bucket:"{consts.influx_bucket}")
+    |> range(start: {duration})
+    |> filter(fn: (r) => r["topic"] =~ /^{first_device_name}.+/)
+    |> filter(fn: (r) => r["_field"] == "co2")
+    |> drop(columns: ["topic", "_measurement", "bucket"])
+    """,
     "soundDbA": f"""from(bucket:"{consts.influx_bucket}")
     |> range(start: {duration})
     |> filter(fn: (r) => r["topic"] =~ /^{first_device_name}.+/)

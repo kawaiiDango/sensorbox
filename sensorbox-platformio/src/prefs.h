@@ -221,7 +221,7 @@ size_t prefsToCbor(uint8_t *buf)
     if (encoded_size > 500)
         ESP_LOGE(TAG_PREFS, "prefs encoded size: %zu", encoded_size);
 
-#if PRINT_CBOR
+#ifdef PRINT_CBOR
     printCbor(buf, encoded_size);
 #endif
     return encoded_size;
