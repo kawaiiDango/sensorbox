@@ -14,10 +14,9 @@
     xEventGroupSetBits(pollingEventGroup, 1 << (uint32_t)arg); \
     vTaskDelete(NULL);
 
-int64_t stayAwakeUntilTime = 0;
+uint64_t stayAwakeUntilTime = 0;
 bool wasTouchpadWakeup = false;
 RTC_DATA_ATTR unsigned long lastAwakeDuration = 0;
-RTC_DATA_ATTR uint lastNtpSyncTimeS = 0;
 
 struct MyUnits {
     const char *dust;

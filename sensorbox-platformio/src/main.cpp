@@ -17,15 +17,14 @@
 #endif
 
 #define NTP_SYNC_INTERVAL_S 60 * 60 * 2 // 2 hours
-#define SERIAL_ENABLED true
 
 const char *TAG_MAIN = "main";
 
 // sleep stuff
-RTC_DATA_ATTR uint bootCount = 0;
+RTC_DATA_ATTR uint8_t measureCountModPm = 0;
+RTC_DATA_ATTR uint8_t measureCountModSubmit = 0;
+RTC_DATA_ATTR uint8_t measureCountModNtp = 0;
 const int collectingIntervalActive = 6000;
-RTC_DATA_ATTR int64_t collectingTime = 0;
-RTC_DATA_ATTR int64_t reportingTime = 0;
 int64_t timeItTime = 0;
 RTC_DATA_ATTR uint16_t touchThreshold = 0;
 
@@ -37,17 +36,16 @@ bool touchInterruptProcessed = true;
 long touchInterruptTime = 0;
 bool buttonPressedToStartApBool = false;
 
-const uint32_t wifiSecureConnectTimeoutMs = 3000;
+const uint32_t wifiSecureConnectTimeoutMs = 1000;
 const uint32_t wifiConnectTimeoutMs = 500;
 RTC_DATA_ATTR uint8_t lastConnectedWifiChannel = 0;
-RTC_DATA_ATTR uint8_t lastBssid[6] = {0, 0, 0, 0, 0, 0};
-TaskHandle_t arduino_task_handle;
+RTC_DATA_ATTR uint8_t lastBssid[6] = {0};
 
 // wakeup reasons
 const uint8_t WAKEUP_FIRST_BOOT = 1 << 0;
 const uint8_t WAKEUP_MEASURE = 1 << 1;
 const uint8_t WAKEUP_SUBMIT = 1 << 2;
-const uint8_t WAKEUP_MEASURE_PM_AND_CO2 = 1 << 3;
+const uint8_t WAKEUP_MEASURE_PM = 1 << 3;
 const uint8_t WAKEUP_AP_MODE = 1 << 4;
 
 RTC_DATA_ATTR uint8_t wakeupReasonsBitset = WAKEUP_FIRST_BOOT | WAKEUP_MEASURE;
@@ -74,35 +72,27 @@ void timeit(const char *msg = "timeit")
 {
   Serial.print(msg);
   Serial.print(" ");
-  Serial.println(rtcMillis() - timeItTime);
-  timeItTime = rtcMillis();
+  Serial.println(millis() - timeItTime);
+  timeItTime = millis();
 }
 
-void print_wakeup_reason()
+const char *get_wakeup_reason_str()
 {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-  Serial.println();
-
   switch (wakeup_reason)
   {
   case ESP_SLEEP_WAKEUP_EXT0:
-    Serial.print("RTC_IO ");
-    break;
+    return "RTC_IO";
   case ESP_SLEEP_WAKEUP_EXT1:
-    Serial.print("RTC_CNTL");
-    break;
+    return "RTC_CNTL";
   case ESP_SLEEP_WAKEUP_TIMER:
-    Serial.print("Timer");
-    break;
+    return "Timer";
   case ESP_SLEEP_WAKEUP_TOUCHPAD:
-    Serial.print("Touchpad");
-    break;
+    return "Touchpad";
   case ESP_SLEEP_WAKEUP_UNDEFINED:
-    Serial.print("Fresh");
-    break;
+    return "Fresh";
   default:
-    Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
-    break;
+    return "Wakeup was not caused by deep sleep";
   }
 }
 
@@ -127,7 +117,7 @@ void runApMode()
 
   lastConnectedWifiChannel = 0;
   // set lastBssid to all 0s
-  memset(lastBssid, 0, 6);
+  memset(lastBssid, 0, sizeof(lastBssid));
 }
 
 #ifdef THE_BOX
@@ -295,21 +285,12 @@ void doOnTouchpadWakeup()
 
 void doOnEveryBoot()
 {
-  arduino_task_handle = xTaskGetCurrentTaskHandle();
-  bootCount++;
   btStop();
   initFromPrefs();
 
-  if (SERIAL_ENABLED)
-    Serial.begin(DEBUG_BAUD_RATE);
-  print_wakeup_reason();
-  Serial.print(" boot: ");
-  Serial.print(bootCount);
-  Serial.print(" ");
-  Serial.print("timeTaken");
-  Serial.print(" ");
-  Serial.print(millis());
-  Serial.println(wakeupReasonsBitset, BIN);
+  Serial.begin(DEBUG_BAUD_RATE);
+
+  ESP_LOGW(TAG_MAIN, "Wakeup: %s, mPm: %u, mSubmit: %u, timeTaken: %u", get_wakeup_reason_str(), measureCountModPm, measureCountModSubmit, millis());
 
   const esp_app_desc_t *appDesc = esp_app_get_description();
 
@@ -358,25 +339,21 @@ void prepareBootIntoApMode()
 
 void doWhileAwakeLoop()
 {
+  uint64_t collectingTime = millis();
+
 #ifdef THE_BOX
-  bool firstScd41ReadingDiscarded = !bitsetContains(wakeupReasonsBitset, WAKEUP_FIRST_BOOT);
   if (!isIdle())
     printSensorDataToLcd();
 #endif
 
   while (!isIdle())
   {
-    if (rtcMillis() - collectingTime > collectingIntervalActive)
+    if (millis() - collectingTime > collectingIntervalActive)
     {
       pollAllSensors();
+      collectingTime = millis();
 
 #ifdef THE_BOX
-      if (!firstScd41ReadingDiscarded)
-      {
-        delay(5000); // response time for one shot measurement
-        prePollScd41();
-        firstScd41ReadingDiscarded = true;
-      }
       updateLcdStatus(true);
       printSensorDataToLcd();
 #endif
@@ -428,14 +405,21 @@ void WiFiLostIP(WiFiEvent_t event, WiFiEventInfo_t info)
 void gotIpTask(void *args)
 {
   // ntp
-  if (lastNtpSyncTimeS == 0 || rtcSecs() - lastNtpSyncTimeS > NTP_SYNC_INTERVAL_S)
+  if (measureCountModNtp == 0 || rtcSecs() < APR_20_2023_S)
   {
     struct tm timeinfo;
     int64_t oldTime = rtcMillis();
     unsigned long timeTaken = millis();
 
     configTime(0, 0, prefs.ntpServer);
-    bool gotNetworkTime = getLocalTime(&timeinfo);
+    bool gotNetworkTime = false;
+    int maxTries = bitsetContains(wakeupReasonsBitset, WAKEUP_FIRST_BOOT) ? 5 : 1;
+
+    for (int tries = 0; tries < maxTries && !gotNetworkTime; tries++)
+    {
+      delay(500);
+      gotNetworkTime = getLocalTime(&timeinfo);
+    }
 
     timeTaken = millis() - timeTaken;
 
@@ -445,15 +429,18 @@ void gotIpTask(void *args)
     }
     else
     {
-      lastNtpSyncTimeS = rtcSecs();
       printRtcMillis(prefs.timezoneOffsetS);
 
+      // fix readings timestamps after the first NTP sync
       if (oldTime / 1000 < APR_20_2023_S)
       {
         if (prefs.lastChangedS == 0)
           savePrefs(); // save the time to preferences
-        fixTimestampsBeforeNtp(&readingsBuffer, (oldTime + timeTaken) / 1000);
+        fixReadingsTimestamps(&readingsBuffer, (oldTime + timeTaken) / 1000);
       }
+
+      // fix wakeup tasks timestamps, they all should be in the future
+      fixPqTimestamps(wakeupTasksQ, oldTime + timeTaken);
     }
   }
 
@@ -476,8 +463,6 @@ void gotIpTask(void *args)
         NULL,
         1,
         NULL);
-
-    reportingTime = rtcMillis();
   }
 
   xSemaphoreGive(gotIpSemaphore);
@@ -530,6 +515,13 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
 
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
 {
+  if (info.wifi_sta_disconnected.reason == WIFI_REASON_NO_AP_FOUND)
+  {
+    // forget wifi channel and bssid, they may have changed now
+    lastConnectedWifiChannel = 0;
+    memset(lastBssid, 0, sizeof(lastBssid));
+  }
+
   Serial.println("Disconnected");
 }
 
@@ -584,7 +576,7 @@ void connectToWiFiIfNeeded()
 
 IRAM_ATTR void touchCallback()
 {
-  if (rtcMillis() - touchInterruptTime > 500 && !isIdle()) // debounce
+  if (millis() - touchInterruptTime > 500 && !isIdle()) // debounce
   {
     page = (page + 1) % 2;
 
@@ -611,12 +603,11 @@ void pollAllSensors()
   createPollingTask(pollPir, "pollPir");
   createPollingTask(pollAudio, "pollAudio");
 
-  // start and schedule sds
-  if (rtcMillis() - sdsStartTime > prefs.collectIntvlMs * prefs.pmSensorEvery)
-  {
-    createPollingTask(startSds, "startSds");
-    priorityQueueWrite(wakeupTasksQ, WakeupTask{WAKEUP_MEASURE_PM_AND_CO2, rtcMillis() + PM_SENSOR_RUNTIME_SECS * 1000});
-  }
+  // if (rtcMillis() - sdsStartTime > prefs.collectIntvlMs * prefs.pmSensorEvery)
+  // {
+  //   createPollingTask(startSds, "startSds");
+  //   priorityQueueWrite(wakeupTasksQ, WakeupTask{WAKEUP_MEASURE_PM, rtcMillis() + PM_SENSOR_RUNTIME_SECS * 1000});
+  // }
 #endif
 
   EventBits_t pollingCompleteBitset = (1 << pollingCtr) - 1;
@@ -629,21 +620,22 @@ void pollAllSensors()
     readings.awakeTime = lastAwakeDuration;
 
 #ifdef THE_BOX
-  if (rtcMillis() - sdsStartTime > prefs.collectIntvlMs * prefs.pmSensorEvery)
-    sdsStartTime = rtcMillis();
+  // start and schedule sds after all other sensors have been polled to avoid voltage ripple while reading
+  if (measureCountModPm == 0)
+  {
+    startSds();
+    priorityQueueWrite(wakeupTasksQ, WakeupTask{WAKEUP_MEASURE_PM, rtcMillis() + PM_SENSOR_RUNTIME_SECS * 1000});
+  }
 
   if (!oobValuesUsed)
   {
     readings.pm25 = oobLastPm25;
     readings.pm10 = oobLastPm10;
-    readings.co2 = oobLastCo2;
-
     oobValuesUsed = true;
   }
 #endif
 
-  collectingTime = rtcMillis();
-  readings.timestamp = collectingTime / 1000;
+  readings.timestamp = rtcSecs();
 
   Readings *readingsCopy = new Readings(readings);
   enqueueReadings(readingsCopy);
@@ -694,7 +686,6 @@ void calibrateTouchTask(void *arg)
 
 void setup()
 {
-
   doOnEveryBoot();
 
   uint8_t nextWakeupReasonsBitset = 0;
@@ -710,12 +701,14 @@ void setup()
     pollAllSensors();
     Serial.println("pollAllSensors");
 
-    if (isIdle() &&
-        !bitsetContains(wakeupReasonsBitset, WAKEUP_SUBMIT) &&
-        rtcMillis() - reportingTime > prefs.reportIntvlMs)
+    if (isIdle() && !bitsetContains(wakeupReasonsBitset, WAKEUP_SUBMIT) && measureCountModSubmit == 0)
       bitsetAdd(nextWakeupReasonsBitset, WAKEUP_SUBMIT);
 
     bitsetAdd(nextWakeupReasonsBitset, WAKEUP_MEASURE);
+
+    measureCountModPm = (measureCountModPm + 1) % prefs.pmSensorEvery;
+    measureCountModSubmit = (measureCountModSubmit + 1) % (prefs.reportIntvlMs / prefs.collectIntvlMs);
+    measureCountModNtp = (measureCountModNtp + 1) % (NTP_SYNC_INTERVAL_S * 1000 / prefs.collectIntvlMs);
   }
 
   if (!isIdle())
@@ -724,8 +717,8 @@ void setup()
     pinMode(BUTTON_PIN, INPUT_PULLUP);
 #endif
     attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonPressedToStartAp, FALLING);
+    doWhileAwakeLoop();
   }
-  doWhileAwakeLoop();
 
   // do the rest
   if (bitsetContains(wakeupReasonsBitset, WAKEUP_SUBMIT))
@@ -737,15 +730,9 @@ void setup()
 
 // out of band wakeup
 #ifdef THE_BOX
-  if (bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_PM_AND_CO2))
+  if (bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_PM))
   {
     pollSds();
-    // co2 data is also ready by this time
-    if (scd41ReadPending)
-    {
-      Wire.begin();
-      pollScd41();
-    }
   }
 #endif
 
@@ -774,15 +761,16 @@ void setup()
   LittleFS.end();
 
   WakeupTask *wt = priorityQueuePop(wakeupTasksQ);
-  wakeupReasonsBitset = wt->wakeupReasonsBitset;
   // make times in the past to 1 sec
   int64_t willWakeInMs = max(500LL, (wt->timestamp - rtcMillis()));
+  wakeupReasonsBitset = wt->wakeupReasonsBitset;
+
   Serial.print("\nAwakeFor: ");
   Serial.print(millis());
   Serial.print(" willWakeInMs: ");
   Serial.print(willWakeInMs);
   Serial.print(" with ");
-  Serial.println(nextWakeupReasonsBitset, BIN);
+  Serial.println(wakeupReasonsBitset, BIN);
   Serial.flush();
   esp_sleep_enable_timer_wakeup(willWakeInMs * 1000);
 

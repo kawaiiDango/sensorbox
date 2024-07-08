@@ -56,7 +56,6 @@ Readings invalidReadings = {
     .audioFft = {0},
 #else
     .voc = NAN,
-    .boardTemperature = NAN,
 #endif
     .temperature = NAN,
     .humidity = NAN,
@@ -198,11 +197,20 @@ void pqPrint(WakeupTask *tasks)
 
 // ------------------------------------- fix timestamps before NTP ---------------
 
-void fixTimestampsBeforeNtp(ReadingsBuffer *cb, unsigned long offset_s)
+void fixReadingsTimestamps(ReadingsBuffer *cb, unsigned long offset_s)
 {
   for (int i = 0; i < READINGS_BUFFER_SIZE; i++)
   {
     if (cb->buffer[i].timestamp != 0 && cb->buffer[i].timestamp < APR_20_2023_S) // 0s are nulls
       cb->buffer[i].timestamp += rtcSecs() - offset_s;
+  }
+}
+
+void fixPqTimestamps(WakeupTask *q, unsigned long offset_ms)
+{
+  for (int i = 0; i < PQ_SIZE; i++)
+  {
+    if (q[i].timestamp != 0) // 0s are nulls
+      q[i].timestamp += rtcMillis() - offset_ms;
   }
 }

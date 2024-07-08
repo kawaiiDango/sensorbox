@@ -191,12 +191,8 @@ size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
     error |= cbor_encode_byte_string(&map_encoder, readings->audioFft, NUM_FFT_BINS);
 
 #else
-
     error |= cbor_encode_text_stringz(&map_encoder, "voc");
     error |= cbor_encode_float(&map_encoder, readings->voc);
-
-    error |= cbor_encode_text_stringz(&map_encoder, "boardTemperature");
-    error |= cbor_encode_float(&map_encoder, readings->boardTemperature);
 #endif
 
     error |= cbor_encode_text_stringz(&map_encoder, "temperature");

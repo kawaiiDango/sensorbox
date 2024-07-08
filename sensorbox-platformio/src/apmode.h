@@ -241,10 +241,10 @@ esp_err_t root_post_handler(httpd_req_t *req)
                 settimeofday(&tv, NULL);
                 printRtcMillis(prefs.timezoneOffsetS);
 
-                lastNtpSyncTimeS = rtcSecs();
-
                 if (oldTime / 1000 < APR_20_2023_S)
-                    fixTimestampsBeforeNtp(&readingsBuffer, oldTime / 1000);
+                    fixReadingsTimestamps(&readingsBuffer, oldTime / 1000);
+                
+                fixPqTimestamps(wakeupTasksQ, oldTime);
 
                 preferences.putUInt(PREF_LAST_CHANGED_S, tv.tv_sec);
             }

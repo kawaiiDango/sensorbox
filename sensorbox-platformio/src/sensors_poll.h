@@ -57,13 +57,12 @@ bool lcdStarted = false;
 bool backlightOn = false;
 bool lcdSleeping = false;
 
-RTC_DATA_ATTR int64_t sdsStartTime = 0;
-
 RTC_DATA_ATTR float oobLastPm25 = NAN;
 RTC_DATA_ATTR float oobLastPm10 = NAN;
 RTC_DATA_ATTR short oobLastCo2 = -1;
 RTC_DATA_ATTR bool oobValuesUsed = false;
-RTC_DATA_ATTR bool scd41ReadPending = false;
+RTC_DATA_ATTR bool scd41Inited = false;
+RTC_DATA_ATTR bool scd41FirstReadingDiscarded = false;
 
 #else
 RTC_DATA_ATTR int64_t vocStartTime = 0;
@@ -265,7 +264,7 @@ void updateLcdStatus(bool enable)
   enableBacklight(enable);
 }
 
-void startSds(void *arg)
+void startSds()
 {
   Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
   SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
@@ -288,8 +287,6 @@ void startSds(void *arg)
     ESP_LOGE(TAG_SENSORS_POLL, "Could not setCustomWorkingPeriod: %s", wps.statusToString().c_str());
 
   Serial.println("startSds");
-
-  COMPLETE_TASK
 }
 
 void pollSds()
@@ -345,13 +342,69 @@ void scd41PrintError(uint16_t error)
 }
 
 // unused for now, manually run when required
-void setupScd41()
+void printScd41Settings()
+{
+  SensirionI2CScd4x scd41;
+  Wire.begin();
+  scd41.begin(Wire);
+  uint16_t data = 0;
+  uint16_t error = 0;
+
+  error = scd41.stopPeriodicMeasurement();
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  ESP_LOGW(TAG_SENSORS_POLL, "Stopped periodic measurement");
+
+  error = scd41.getAutomaticSelfCalibration(data);
+
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  ESP_LOGW(TAG_SENSORS_POLL, "Automatic self calibration: %d", data);
+
+  error = scd41.getAutomaticSelfCalibrationInitialPeriod(data); // is 44
+
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  ESP_LOGW(TAG_SENSORS_POLL, "Automatic self calibration initial period: %d", data);
+
+  error = scd41.getAutomaticSelfCalibrationStandardPeriod(data); // is 156
+
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  ESP_LOGW(TAG_SENSORS_POLL, "Automatic self calibration standard period: %d", data);
+}
+
+// unused for now, manually run when required
+void changeScd41Settings()
 {
   SensirionI2CScd4x scd41;
   Wire.begin();
   scd41.begin(Wire);
   uint16_t ascEnabled = 0;
   uint16_t error = 0;
+
+  error = scd41.stopPeriodicMeasurement();
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
 
   error = scd41.getAutomaticSelfCalibration(ascEnabled);
 
@@ -388,33 +441,6 @@ void setupScd41()
 }
 
 // to be run after reading pressure
-void prePollScd41()
-{
-  SensirionI2CScd4x scd41;
-  uint16_t error;
-  uint16_t pressure = readings.pressure;
-
-  ESP_LOGW(TAG_SENSORS_POLL, "prePollScd41");
-
-  scd41.begin(Wire);
-
-  error = scd41.setAmbientPressure(pressure);
-
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
-
-  error = scd41_measureSingleShotNoWait();
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
-  scd41ReadPending = true;
-}
-
 void pollScd41()
 {
   SensirionI2CScd4x scd41;
@@ -425,6 +451,22 @@ void pollScd41()
 
   scd41.begin(Wire);
 
+  // setup
+  if (!scd41Inited)
+  {
+    scd41.stopPeriodicMeasurement();
+
+    error = scd41.startLowPowerPeriodicMeasurement();
+    if (error)
+    {
+      scd41PrintError(error);
+      return;
+    }
+
+    scd41Inited = true;
+  }
+
+  // read prev measurement
   error = scd41.readMeasurement(co2, temperature, humidity);
   if (error)
   {
@@ -436,10 +478,33 @@ void pollScd41()
   }
   else
   {
-    oobLastCo2 = co2;
-    scd41ReadPending = false;
+    if (scd41FirstReadingDiscarded)
+    {
+      readings.co2 = co2;
+      oobLastCo2 = co2;
+    }
+    else
+    {
+      scd41FirstReadingDiscarded = true;
+    }
     ESP_LOGW(TAG_SENSORS_POLL, "CO2: %d, Temperature: %.2f / %.2f, Humidity: %.2f / %.2f", co2, temperature, readings.temperature, humidity, readings.humidity);
   }
+
+  // set params for the next measurement
+  error = scd41.setAmbientPressure((uint16_t)readings.pressure);
+
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  // error = scd41.measureSingleShot();
+  // if (error)
+  // {
+  //   scd41PrintError(error);
+  //   return;
+  // }
 }
 
 void pollAudio(void *arg)
@@ -542,9 +607,8 @@ void pollI2cSensors(void *arg)
   pollSht41();
   pollBmp280();
   pollTSL2591();
+  pollScd41();
 
-  if (rtcMillis() - sdsStartTime > prefs.collectIntvlMs * prefs.pmSensorEvery)
-    prePollScd41();
 #else
   pollDht20();
   // pollVocContinuous();
@@ -557,11 +621,6 @@ void pollBoardStats()
   readings.freeHeap = ESP.getFreeHeap();
 
   Serial.printf("Free heap: %.2fK\n", readings.freeHeap / 1024);
-
-#ifndef THE_BOX
-  if (WiFi.status() == WL_CONNECTED)
-    readings.boardTemperature = temperatureRead();
-#endif
 }
 
 void createPollingTask(TaskFunction_t taskFn, const char *taskName, uint32_t stackSize = configMINIMAL_STACK_SIZE * 3, UBaseType_t priority = 1)
