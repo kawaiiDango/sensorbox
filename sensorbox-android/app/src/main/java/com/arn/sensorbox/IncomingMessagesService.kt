@@ -20,59 +20,54 @@ class IncomingMessagesService : FirebaseMessagingService() {
         Log.d(this::class.simpleName, "onMessageReceived: ${message.data}")
 
         val coapTopic = message.data["topic"] ?: return
+        val deviceName = coapTopic.substringBefore("/")
         val coapPayload = message.data["payload"] ?: return
 
-        val cachedData = runBlocking { App.prefs.data.map { it.cachedData }.first() }
+        val cachedData = runBlocking { App.prefs.data.map { it.cachedData }.first() }.toMutableMap()
 
         val newData = App.json.decodeFromString<SensorBoxData>(coapPayload)
         val firstDevice = BuildConfig.DEVICE_NAMES[0]
         val secondDevice = BuildConfig.DEVICE_NAMES.getOrNull(1)
 
-        val savedTimestamp = when {
-            secondDevice != null && coapTopic == "$secondDevice/data" -> cachedData.timestampSecond
-            else -> cachedData.timestampFirst
-        }
+        val savedTimestamp = cachedData[deviceName]?.timestamp ?: 0L
 
-        if (newData.timestampFirst <= savedTimestamp) {
+        if (newData.timestamp <= savedTimestamp) {
             Log.d(this::class.simpleName, "onMessageReceived: ignoring old data")
             return
         }
 
-        var newCachedData = cachedData
-
-        if (secondDevice != null && coapTopic == "$secondDevice/data") {
-            newCachedData = newCachedData.copy(
-                roomTemperature = newData.temperature,
-                roomHumidity = newData.humidity,
-                roomVoltageAvg = newData.voltageAvg,
-                timestampSecond = newData.timestampFirst
-            )
-        } else if (coapTopic == "$firstDevice/data") {
-
-            if (newData.pm25 != 0f && newData.pm10 != 0f && newData.co2 != 0f)
-                newCachedData = newCachedData.copy(
-                    pm25 = newData.pm25,
-                    pm10 = newData.pm10,
-                    co2 = newData.co2
-                )
-
-            if (newData.temperature != 0f && newData.humidity != 0f)
-                newCachedData = newCachedData.copy(
+        if (secondDevice != null && deviceName == secondDevice) {
+            cachedData[deviceName] = cachedData[deviceName]?.copy(
+                temperature = newData.temperature,
+                humidity = newData.humidity,
+                voltageAvg = newData.voltageAvg,
+                timestamp = newData.timestamp
+            ) ?: newData
+        } else if (deviceName == firstDevice) {
+                cachedData[deviceName] = cachedData[deviceName]?.copy(
                     temperature = newData.temperature,
                     humidity = newData.humidity,
                     pressure = newData.pressure,
                     luminosity = newData.luminosity,
                     soundDbA = newData.soundDbA,
                     voltageAvg = newData.voltageAvg,
-                    timestampFirst = newData.timestampFirst
-                )
+                    timestamp = newData.timestamp,
+                )?.let {
+                    if (newData.pm25 != 0f && newData.pm10 != 0f && newData.co2 != 0f)
+                        it.copy(
+                            pm25 = newData.pm25,
+                            pm10 = newData.pm10,
+                            co2 = newData.co2
+                        )
+                    else it
+                } ?: newData
         }
 
         runBlocking {
-            App.prefs.updateData { it.copy(cachedData = newCachedData) }
+            App.prefs.updateData { it.copy(cachedData = cachedData) }
         }
         // update all appwidgets
-        ListDataUtils.updateWidgets(newCachedData)
+        ListDataUtils.updateWidgets(cachedData)
     }
 
 }

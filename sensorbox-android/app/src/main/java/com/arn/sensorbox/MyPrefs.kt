@@ -11,7 +11,7 @@ import java.io.OutputStream
 
 @Serializable
 data class MyPrefs(
-    val cachedData: SensorBoxData = SensorBoxData(),
+    val cachedData: Map<String, SensorBoxData> = emptyMap(),
     val subscribedTopics: Set<String> = emptySet(),
 )
 

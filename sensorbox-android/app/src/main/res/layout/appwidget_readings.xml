@@ -3,7 +3,7 @@
     android:id="@android:id/background"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:theme="@style/Theme.Material3.DynamicColors.DayNight">
+    android:theme="@android:style/Theme.DeviceDefault.DayNight">
 
     <ImageView
         android:id="@+id/widget_bg"
@@ -26,6 +26,6 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:text="@string/no_data"
-        android:textColor="?attr/colorOnPrimaryContainer" />
+        android:textColor="@color/widgetFg" />
 
 </FrameLayout>

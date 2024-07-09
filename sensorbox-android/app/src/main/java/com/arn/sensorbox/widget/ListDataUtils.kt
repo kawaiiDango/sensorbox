@@ -27,13 +27,13 @@ object ListDataUtils {
         }
     }
 
-    fun updateWidgets(sensorBoxData: SensorBoxData) {
+    fun updateWidgets(cachedData: Map<String, SensorBoxData>) {
         val appWidgetManager = AppWidgetManager.getInstance(App.context)
         val appWidgetIds = appWidgetManager.getAppWidgetIds(
             ComponentName(App.context, ReadingsWidgetProvider::class.java)
         )
         appWidgetIds.forEach { appWidgetId ->
-            updateAppWidget(App.context, appWidgetManager, appWidgetId, sensorBoxData)
+            updateAppWidget(App.context, appWidgetManager, appWidgetId, cachedData)
         }
     }
 

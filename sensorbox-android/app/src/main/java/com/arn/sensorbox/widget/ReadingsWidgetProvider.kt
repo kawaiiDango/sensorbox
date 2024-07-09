@@ -3,11 +3,12 @@ package com.arn.sensorbox.widget
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
-import android.util.Log
 import android.widget.RemoteViews
 import com.arn.sensorbox.App
+import com.arn.sensorbox.BuildConfig
 import com.arn.sensorbox.R
-import com.arn.sensorbox.widget.DataItems.Companion.toDataItems
+import com.arn.sensorbox.widget.DataItem.Companion.toDataItems
+import com.google.android.gms.common.internal.Objects
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
@@ -37,7 +38,7 @@ internal fun updateAppWidget(
     context: Context,
     appWidgetManager: AppWidgetManager,
     appWidgetId: Int,
-    sensorBoxData: SensorBoxData,
+    cachedData: Map<String, SensorBoxData>,
 ) {
     val rv = RemoteViews(context.packageName, R.layout.appwidget_readings)
 
@@ -45,17 +46,22 @@ internal fun updateAppWidget(
         setHasStableIds(true)
         setViewTypeCount(2)
 
-        sensorBoxData.toDataItems().forEach { dataItems ->
+        cachedData.forEach { (deviceName, sensorBoxData) ->
             addItem(
-                dataItems.suffix.hashCode().toLong(),
-                ListDataUtils.createHeader(dataItems.timestamp)
+                deviceName.hashCode().toLong(),
+                ListDataUtils.createHeader(sensorBoxData.timestamp)
             )
-            dataItems.items.forEach { item ->
+
+            val suffix =
+                if (deviceName == BuildConfig.DEVICE_NAMES[0]) "" else deviceName.first().toString()
+
+            sensorBoxData.toDataItems().forEach { dataItem ->
                 addItem(
-                    item.hashCode().toLong(),
-                    ListDataUtils.createDataItem(dataItems.suffix, item)
+                    Objects.hashCode(deviceName, dataItem.emoji, dataItem.unit).toLong(),
+                    ListDataUtils.createDataItem(suffix, dataItem)
                 )
             }
+
         }
     }.build()
 

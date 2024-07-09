@@ -12,7 +12,6 @@ espresso-core = "3.6.1"
 activity-compose = "1.9.0"
 compose-bom = "2024.06.00"
 firebase-bom = "33.1.1"
-material = "1.12.0"
 
 [libraries]
 androidx-datastore-core = { module = "androidx.datastore:datastore-core", version.ref = "datastore" }
@@ -25,7 +24,6 @@ kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", v
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
-views-material = { module = "com.google.android.material:material", version.ref = "material" }
 ui = { group = "androidx.compose.ui", name = "ui" }
 ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
