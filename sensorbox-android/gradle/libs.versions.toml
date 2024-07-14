@@ -1,5 +1,7 @@
 [versions]
-com-android-application = "8.6.0-alpha08"
+targetSdk = "35"
+minSdk = "26"
+com-android-application = "8.7.0-alpha01"
 compose-compiler-android = "1.5.14"
 datastore = "1.1.1"
 google-services = "4.4.2"
@@ -11,7 +13,8 @@ androidx-test-ext-junit = "1.2.1"
 espresso-core = "3.6.1"
 activity-compose = "1.9.0"
 compose-bom = "2024.06.00"
-firebase-bom = "33.1.1"
+firebase-bom = "33.1.2"
+core-remoteviews = "1.1.0"
 
 [libraries]
 androidx-datastore-core = { module = "androidx.datastore:datastore-core", version.ref = "datastore" }
@@ -33,6 +36,7 @@ ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 material3 = { group = "androidx.compose.material3", name = "material3" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
+androidx-core-remoteviews = { module = "androidx.core:core-remoteviews", version.ref = "core-remoteviews" }
 
 [plugins]
 com-android-application = { id = "com.android.application", version.ref = "com-android-application" }

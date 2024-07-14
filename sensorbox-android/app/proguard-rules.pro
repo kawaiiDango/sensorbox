@@ -22,5 +22,4 @@
 
 -dontobfuscate
 
--keep class com.google.firebase.messaging.** { *; }
--keep class com.google.firebase.installations.** { *; }
+-keep class * implements com.google.firebase.components.ComponentRegistrar { void <init>(); }

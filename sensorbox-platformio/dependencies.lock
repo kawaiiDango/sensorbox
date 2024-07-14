@@ -30,10 +30,10 @@ dependencies:
       type: idf
     version: 5.1.4
   joltwallet/littlefs:
-    component_hash: 82fe9d7d57b5b95d29532aec744f3cfdf9ae1775ac0ca52ac61fc6dd7cf53dba
+    component_hash: 362f1f5beb5087b0c60169aff82676d2d0ffc991ead975212b0cba95959181c5
     source:
       type: service
-    version: 1.14.6
+    version: 1.14.8
 manifest_hash: bb7ebbac86cd00264df4d750b2ccd079e508195135317fa5cb6ba9ce90535b92
 target: esp32
 version: 1.0.0

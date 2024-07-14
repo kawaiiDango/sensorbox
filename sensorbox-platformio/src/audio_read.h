@@ -135,6 +135,20 @@ esp_err_t mic_i2s_init()
     // Before reading data, start the RX channel first
     ret |= i2s_channel_enable(rx_handle);
 
+    if (ret == ESP_OK)
+    {
+        i2s_inited = true;
+    }
+
+    return ret;
+}
+
+esp_err_t mic_i2s_deinit()
+{
+    esp_err_t ret = i2s_channel_disable(rx_handle);
+    ret |= i2s_del_channel(rx_handle);
+    i2s_inited = false;
+
     return ret;
 }
 
@@ -171,10 +185,9 @@ void mic_i2s_reader_task(void *parameter)
         if (ret != ESP_OK)
         {
             ESP_LOGE(TAG_AUDIO, "Couldn't read I2S. Error = %i", ret);
+            mic_i2s_deinit();
             vTaskDelete(NULL);
         }
-
-        i2s_inited = true;
     }
 
     for (int read_count = 0; read_count < NUM_SAMPLES_SHORT && mic_i2s_reader_task_read; read_count++)
@@ -213,11 +226,13 @@ void mic_i2s_reader_task(void *parameter)
             samples[i] = MIC_CONVERT(int_samples[i]);
         sum_queue_t q;
 
+        // DC_BLOCKER.filter(samples, samples, SAMPLES_SHORT);
+
         // Apply equalization and calculate Z-weighted sum of squares,
         // writes filtered samples back to the same buffer.
         q.sum_sqr_SPL = MIC_EQUALIZER.filter(samples, samples, SAMPLES_SHORT);
 
-        DC_BLOCKER.filter(samples, samples, SAMPLES_SHORT);
+        // DC_BLOCKER.filter(samples, samples, SAMPLES_SHORT);
 
         // Apply weighting and calucate weigthed sum of squares
         q.sum_sqr_weighted = currentWeightingFilter.filter(samples, samples, SAMPLES_SHORT);
@@ -232,6 +247,11 @@ void mic_i2s_reader_task(void *parameter)
 
     do_fft_and_log_resample(samples, (uint8_t *)parameter);
     xSemaphoreGive(fft_calculated_samaphore);
+
+    if (i2s_inited)
+    {
+        mic_i2s_deinit();
+    }
 
     vTaskDelete(NULL);
 }
@@ -350,7 +370,7 @@ void do_fft_and_log_resample(float *samples, uint8_t *spectrum_log)
 // Note: Use doubles, not floats, here unless you want to pin
 //       the task to whichever core it happens to run on at the moment
 //
-void audio_read(float *dbA, u_int8_t *fft_resampled)
+void audio_read(float *dbA, float *dbZ, u_int8_t *fft_resampled)
 {
     mic_i2s_reader_task_read = true;
     // Create FreeRTOS queue
@@ -368,7 +388,7 @@ void audio_read(float *dbA, u_int8_t *fft_resampled)
     sum_queue_t q;
     uint32_t Leq_samples = 0;
     double Leq_sum_sqr = 0;
-    double Leq_dB = 0;
+    double Leq_sum_sqr_unweighted = 0;
 
     // Read sum of samaples, calculated by 'i2s_reader_task'
     while (xQueueReceive(samples_queue, &q, 1000 / portTICK_PERIOD_MS))
@@ -385,27 +405,26 @@ void audio_read(float *dbA, u_int8_t *fft_resampled)
         // In case of acoustic overload or below noise floor measurement, report infinty Leq value
         if (short_SPL_dB > MIC_OVERLOAD_DB || isnan(short_SPL_dB) || short_SPL_dB < MIC_NOISE_DB)
         {
-            Leq_sum_sqr = -INFINITY;
             mic_i2s_reader_task_read = false;
             break;
         }
 
         // Accumulate Leq sum
         Leq_sum_sqr += q.sum_sqr_weighted;
+        Leq_sum_sqr_unweighted += q.sum_sqr_SPL;
         Leq_samples += SAMPLES_SHORT;
 
         // When we gather enough samples, calculate new Leq value
         if (Leq_samples >= SAMPLE_RATE * LEQ_PERIOD)
         {
             mic_i2s_reader_task_read = false;
-            double Leq_RMS = sqrt(Leq_sum_sqr / Leq_samples);
-            Leq_dB = MIC_OFFSET_DB + MIC_REF_DB + 20 * log10(Leq_RMS / MIC_REF_AMPL);
             // Leq_sum_sqr = 0;
             // Leq_samples = 0;
 
-            *dbA = Leq_dB;
+            *dbA = MIC_OFFSET_DB + MIC_REF_DB + 20 * log10(sqrt(Leq_sum_sqr / Leq_samples) / MIC_REF_AMPL);
+            *dbZ = MIC_OFFSET_DB + MIC_REF_DB + 20 * log10(sqrt(Leq_sum_sqr_unweighted / Leq_samples) / MIC_REF_AMPL);
 
-            ESP_LOGW(TAG_AUDIO, "Leq: %f", Leq_dB);
+            ESP_LOGW(TAG_AUDIO, "Leq: %f dbA, %f dbZ", *dbA, *dbZ);
 
             // waiting for fft
             xSemaphoreTake(fft_calculated_samaphore, 1000 / portTICK_PERIOD_MS);

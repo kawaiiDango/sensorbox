@@ -11,12 +11,12 @@ plugins {
 
 android {
     namespace = "com.arn.sensorbox"
-    compileSdk = 35
+    compileSdk = libs.versions.targetSdk.get().toInt()
 
     defaultConfig {
         applicationId = "com.arn.sensorbox"
-        minSdk = 31
-        targetSdk = 35
+        minSdk = libs.versions.minSdk.get().toInt()
+        targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
         setProperty("archivesBaseName", rootProject.name)
@@ -83,6 +83,7 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.datastore.core)
+    implementation(libs.androidx.core.remoteviews)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.espresso.core)

@@ -96,17 +96,18 @@ void pollBmp280()
   Adafruit_Sensor *bmp_pressure = bmp.getPressureSensor();
   sensors_event_t pressureEvent;
 
-  if (bmp.begin(0x76))
+  if (bmp.begin(0x76)) // this sets mode to normal again
   {
-    bmp.setSampling(Adafruit_BMP280::MODE_FORCED,      /* Operating Mode. */
-                    Adafruit_BMP280::SAMPLING_X1,      /* Temp. oversampling */
-                    Adafruit_BMP280::SAMPLING_X8,      /* Pressure oversampling */
-                    Adafruit_BMP280::FILTER_OFF,       /* Filtering. */
-                    Adafruit_BMP280::STANDBY_MS_4000); /* Standby time. */
-
     bmp_pressure->getEvent(&pressureEvent);
 
     readings.pressure = pressureEvent.pressure;
+
+    // go to sleep
+    bmp.setSampling(Adafruit_BMP280::MODE_SLEEP,      /* Operating Mode. */
+                    Adafruit_BMP280::SAMPLING_X1,      /* Temp. oversampling */
+                    Adafruit_BMP280::SAMPLING_X1,      /* Pressure oversampling */
+                    Adafruit_BMP280::FILTER_OFF,       /* Filtering. */
+                    Adafruit_BMP280::STANDBY_MS_4000); /* Standby time. */
   }
   else
   {
@@ -512,7 +513,7 @@ void pollAudio(void *arg)
   pinMode(MIC_POWER_PIN, OUTPUT);
   digitalWrite(MIC_POWER_PIN, HIGH);
   delay(50);
-  audio_read(&readings.soundDbA, readings.audioFft);
+  audio_read(&readings.soundDbA, &readings.soundDbZ, readings.audioFft);
 
   pinMode(MIC_POWER_PIN, OUTPUT);
   digitalWrite(MIC_POWER_PIN, LOW);
@@ -593,20 +594,13 @@ void pollBatteryVoltage(void *arg)
   COMPLETE_TASK
 }
 
-float pollBatteryVoltage()
-{
-  float v = 0;
-  pollBatteryVoltage(&v);
-  return v;
-}
-
 void pollI2cSensors(void *arg)
 {
   Wire.begin();
 #ifdef THE_BOX
   pollSht41();
-  pollBmp280();
   pollTSL2591();
+  pollBmp280();
   pollScd41();
 
 #else

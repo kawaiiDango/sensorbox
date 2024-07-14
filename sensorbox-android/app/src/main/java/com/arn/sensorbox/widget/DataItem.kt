@@ -32,8 +32,16 @@ data class DataItem(
                 dataItems.add(DataItem(luminosity, "lux", "☀"))
             }
 
+            if (visible != 0f && ir != 0f) {
+                dataItems.add(DataItem(ir * 100 / visible, "%", "⭕"))
+            }
+
             if (soundDbA != 0f) {
-                dataItems.add(DataItem(soundDbA, "dB", "📢"))
+                dataItems.add(DataItem(soundDbA, "dB", "📢a"))
+            }
+
+            if (soundDbZ != 0f) {
+                dataItems.add(DataItem(soundDbZ, "dB", "📢z"))
             }
 
             if (pm25 != 0f) {

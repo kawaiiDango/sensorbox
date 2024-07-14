@@ -4,17 +4,17 @@
 #include <my_utils.h>
 
 #ifdef THE_BOX
-#define READINGS_NUM_FIELDS 16
+#define READINGS_NUM_FIELDS 17
+#define READINGS_BUFFER_SIZE 47
 #else
-// #define READINGS_BUFFER_SIZE 170
+#define READINGS_BUFFER_SIZE 280
 #define READINGS_NUM_FIELDS 7
 #endif
 #define PQ_SIZE 6
-#define READINGS_BUFFER_SIZE 48
 
 struct Readings
 {
-  uint timestamp; // seconds since epoch
+  uint timestampS; // seconds since epoch
 
 #ifdef THE_BOX
   signed char motion;
@@ -26,6 +26,7 @@ struct Readings
   float pm10;
   short co2;
   float soundDbA;
+  float soundDbZ;
   uint8_t audioFft[106];
 #else
   float voc;
@@ -41,7 +42,7 @@ struct Readings
 typedef struct Readings Readings;
 
 Readings invalidReadings = {
-    .timestamp = 0,
+    .timestampS = 0,
 
 #ifdef THE_BOX
     .motion = -1,
@@ -53,6 +54,7 @@ Readings invalidReadings = {
     .pm10 = NAN,
     .co2 = -1,
     .soundDbA = NAN,
+    .soundDbZ = NAN,
     .audioFft = {0},
 #else
     .voc = NAN,
@@ -78,7 +80,7 @@ RTC_DATA_ATTR ReadingsBuffer readingsBuffer;
 struct WakeupTask
 {
   uint8_t wakeupReasonsBitset;
-  int64_t timestamp;
+  uint64_t timestamp;
 };
 typedef struct WakeupTask WakeupTask;
 RTC_DATA_ATTR WakeupTask wakeupTasksQ[PQ_SIZE];
@@ -102,7 +104,7 @@ Readings *readingsBufferPop(ReadingsBuffer *cb)
 WakeupTask *priorityQueuePop(WakeupTask *q)
 {
   size_t length = PQ_SIZE;
-  int64_t minTimestamp = INT64_MAX;
+  uint64_t minTimestamp = UINT64_MAX;
   size_t minIdx = 0;
   for (size_t i = 0; i < length; i++)
   {
@@ -113,7 +115,7 @@ WakeupTask *priorityQueuePop(WakeupTask *q)
     }
   }
 
-  if (minTimestamp != INT64_MAX)
+  if (minTimestamp != UINT64_MAX)
   {
     return &q[minIdx];
   }
@@ -197,20 +199,26 @@ void pqPrint(WakeupTask *tasks)
 
 // ------------------------------------- fix timestamps before NTP ---------------
 
-void fixReadingsTimestamps(ReadingsBuffer *cb, unsigned long offset_s)
+void fixReadingsTimestamps(ReadingsBuffer *cb, unsigned long old_time_s)
 {
   for (int i = 0; i < READINGS_BUFFER_SIZE; i++)
   {
-    if (cb->buffer[i].timestamp != 0 && cb->buffer[i].timestamp < APR_20_2023_S) // 0s are nulls
-      cb->buffer[i].timestamp += rtcSecs() - offset_s;
+    if (cb->buffer[i].timestampS != 0 && cb->buffer[i].timestampS < APR_20_2023_S) // 0s are nulls
+    {
+      int diff = static_cast<int64_t>(rtcSecs()) - static_cast<int64_t>(old_time_s);
+      cb->buffer[i].timestampS += diff;
+    }
   }
 }
 
-void fixPqTimestamps(WakeupTask *q, unsigned long offset_ms)
+void fixPqTimestamps(WakeupTask *q, uint64_t old_time_ms)
 {
   for (int i = 0; i < PQ_SIZE; i++)
   {
     if (q[i].timestamp != 0) // 0s are nulls
-      q[i].timestamp += rtcMillis() - offset_ms;
+    {
+      int64_t diff = static_cast<int64_t>(rtcMillis()) - static_cast<int64_t>(old_time_ms);
+      q[i].timestamp += diff;
+    }
   }
 }

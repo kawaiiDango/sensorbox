@@ -234,7 +234,7 @@ esp_err_t root_post_handler(httpd_req_t *req)
             long long timestamp = atoll(value);
             if (timestamp / 1000 > APR_20_2023_S)
             {
-                int64_t oldTime = rtcMillis();
+                uint64_t oldTime = rtcMillis();
 
                 // set the system time
                 struct timeval tv = {(time_t)(timestamp / 1000), (suseconds_t)((timestamp % 1000) * 1000)};

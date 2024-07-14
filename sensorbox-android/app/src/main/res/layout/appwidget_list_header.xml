@@ -9,5 +9,6 @@
     android:paddingTop="8dp"
     android:paddingBottom="2dp"
     android:textAlignment="center"
+    android:textColor="@color/widgetFg"
     android:textStyle="italic"
     tools:text="7 days" />

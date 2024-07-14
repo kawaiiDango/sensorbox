@@ -5,6 +5,9 @@ influx_url = "http://localhost:1234"
 firebase_certificate_file = "something.json"
 coap_bind_ip = "0.0.0.0"
 coap_bind_port = 1235
+# set these to None if you don't want to use DTLS
+dtls_psk = None
+dtls_client_identity = None
 webhook_bind_port = 1236
 # the time you want digest push notifications on the app
 daily_digest_hr = 18

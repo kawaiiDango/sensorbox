@@ -91,11 +91,11 @@ float mapf(float x, float in_min, float in_max, float out_min, float out_max)
     return (delta * rise) / run + out_min;
 }
 
-int64_t rtcMillis()
+uint64_t rtcMillis()
 {
     timeval currentTime;
     gettimeofday(&currentTime, NULL);
-    int64_t milliseconds = (int64_t)currentTime.tv_sec * 1000L + (int64_t)currentTime.tv_usec / 1000L;
+    uint64_t milliseconds = (uint64_t)currentTime.tv_sec * 1000L + (uint64_t)currentTime.tv_usec / 1000L;
     return milliseconds;
 }
 

@@ -5,12 +5,13 @@ import logging
 import math
 import datetime
 import json
+import sys
 from urllib.parse import urlparse
 
 import cbor2
 import aiocoap
 from aiocoap.resource import Resource, ObservableResource
-from aiocoap.numbers.contentformat import ContentFormat
+from aiocoap.credentials import CredentialsMap
 from influxdb_client.domain.write_precision import WritePrecision
 from influxdb_client import Point
 
@@ -151,6 +152,31 @@ async def main(write_api_p):
 
     root.add_resource(["time"], TimeResource())
 
+    server_credentials = None
+    transports = None
+
+    if consts.dtls_client_identity and consts.dtls_psk:
+        server_credentials = CredentialsMap()
+        server_credentials.load_from_dict(
+            {
+                ":client": {
+                    "dtls": {
+                        "client-identity": {"ascii": consts.dtls_client_identity},
+                        "psk": {"ascii": consts.dtls_psk},
+                    }
+                }
+            }
+        )
+        transports = ["tinydtls_server"]
+    else:
+        if sys.platform != "linux":
+            transports = ["simple6"]
+        else:
+            transports = ["udp6"]
+
     await aiocoap.Context.create_server_context(
-        root, bind=(consts.coap_bind_ip, consts.coap_bind_port)
+        root,
+        bind=(consts.coap_bind_ip, consts.coap_bind_port),  # dtls runs on port + 1
+        server_credentials=server_credentials,
+        transports=transports,
     )

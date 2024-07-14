@@ -49,7 +49,10 @@ class IncomingMessagesService : FirebaseMessagingService() {
                     humidity = newData.humidity,
                     pressure = newData.pressure,
                     luminosity = newData.luminosity,
+                    visible = newData.visible,
+                    ir = newData.ir,
                     soundDbA = newData.soundDbA,
+                    soundDbZ = newData.soundDbZ,
                     voltageAvg = newData.voltageAvg,
                     timestamp = newData.timestamp,
                 )?.let {
@@ -67,7 +70,7 @@ class IncomingMessagesService : FirebaseMessagingService() {
             App.prefs.updateData { it.copy(cachedData = cachedData) }
         }
         // update all appwidgets
-        ListDataUtils.updateWidgets(cachedData)
+        ListDataUtils.updateWidgets()
     }
 
 }

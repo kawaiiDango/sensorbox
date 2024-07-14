@@ -25,7 +25,7 @@ struct coap_meta
     Readings *readings;
 };
 
-int64_t coap_last_active_time = 0;
+uint64_t coap_last_active_time = 0;
 bool coapClientInitialized = false;
 std::map<coap_mid_t, Readings *> coapMessagesSent;
 coap_context_t *coap_ctx = NULL;
@@ -135,13 +135,8 @@ coap_session_t *coap_start_psk_session(coap_context_t *ctx, coap_address_t *dst_
     dtls_psk.psk_info.key.s = (const uint8_t *)prefs.coapDtlsPsk;
     dtls_psk.psk_info.key.length = strlen(prefs.coapDtlsPsk);
 
-#ifdef CONFIG_COAP_OSCORE_SUPPORT
-    return coap_new_client_session_oscore_psk(ctx, NULL, dst_addr, proto,
-                                              &dtls_psk, oscore_conf);
-#else  /* ! CONFIG_COAP_OSCORE_SUPPORT */
     return coap_new_client_session_psk2(ctx, NULL, dst_addr, proto,
                                         &dtls_psk);
-#endif /* ! CONFIG_COAP_OSCORE_SUPPORT */
 }
 #endif /* CONFIG_COAP_MBEDTLS_PSK */
 
@@ -157,7 +152,7 @@ size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
     error |= cbor_encoder_create_map(&root_encoder, &map_encoder, READINGS_NUM_FIELDS);
 
     error |= cbor_encode_text_stringz(&map_encoder, "timestamp");
-    error |= cbor_encode_uint(&map_encoder, readings->timestamp);
+    error |= cbor_encode_uint(&map_encoder, readings->timestampS);
 
 #ifdef THE_BOX
     error |= cbor_encode_text_stringz(&map_encoder, "motion");
@@ -183,6 +178,9 @@ size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
 
     error |= cbor_encode_text_stringz(&map_encoder, "soundDbA");
     error |= cbor_encode_float(&map_encoder, readings->soundDbA);
+
+    error |= cbor_encode_text_stringz(&map_encoder, "soundDbZ");
+    error |= cbor_encode_float(&map_encoder, readings->soundDbZ);
 
     error |= cbor_encode_text_stringz(&map_encoder, "co2");
     error |= cbor_encode_int(&map_encoder, readings->co2);
@@ -296,6 +294,8 @@ void coapPrepareClient()
     {
 #ifdef CONFIG_COAP_MBEDTLS_PSK
         coap_session = coap_start_psk_session(coap_ctx, &dst_addr, &uri, proto);
+#else
+#error "enable dtls with psk"
 #endif /* CONFIG_COAP_MBEDTLS_PSK */
     }
     else
@@ -331,8 +331,7 @@ void coap_client_cleanup()
     {
         for (auto const &entry : coapMessagesSent)
         {
-            Serial.print(entry.first, HEX);
-            Serial.println(" not ACKed");
+            ESP_LOGE(TAG_REPORTER, "%X not ACKed", entry.first);
             enqueueReadings(entry.second);
         }
 
@@ -341,8 +340,8 @@ void coap_client_cleanup()
         {
             if (meta.readings == NULL)
                 continue;
-            Serial.print(meta.readings->timestamp);
-            Serial.println(" not sent");
+
+            ESP_LOGE(TAG_REPORTER, "Readings %u not sent", meta.readings->timestampS);
             enqueueReadings(meta.readings);
         }
     }

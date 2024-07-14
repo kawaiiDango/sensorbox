@@ -48,6 +48,12 @@
                 android:resource="@xml/appwidget_readings_info" />
         </receiver>
 
+        <service
+            android:name="androidx.core.widget.RemoteViewsCompatService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:process=":widget" />
+
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@drawable/ic_package" />

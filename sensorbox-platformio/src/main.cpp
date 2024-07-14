@@ -25,7 +25,7 @@ RTC_DATA_ATTR uint8_t measureCountModPm = 0;
 RTC_DATA_ATTR uint8_t measureCountModSubmit = 0;
 RTC_DATA_ATTR uint8_t measureCountModNtp = 0;
 const int collectingIntervalActive = 6000;
-int64_t timeItTime = 0;
+uint64_t timeItTime = 0;
 RTC_DATA_ATTR uint16_t touchThreshold = 0;
 
 const long forceWakeupTimeout = 20 * 1000;
@@ -290,7 +290,7 @@ void doOnEveryBoot()
 
   Serial.begin(DEBUG_BAUD_RATE);
 
-  ESP_LOGW(TAG_MAIN, "Wakeup: %s, mPm: %u, mSubmit: %u, timeTaken: %u", get_wakeup_reason_str(), measureCountModPm, measureCountModSubmit, millis());
+  ESP_LOGW(TAG_MAIN, "Wakeup: %s, mPm: %u, mSubmit: %u, timeTaken: %lu", get_wakeup_reason_str(), measureCountModPm, measureCountModSubmit, millis());
 
   const esp_app_desc_t *appDesc = esp_app_get_description();
 
@@ -408,7 +408,7 @@ void gotIpTask(void *args)
   if (measureCountModNtp == 0 || rtcSecs() < APR_20_2023_S)
   {
     struct tm timeinfo;
-    int64_t oldTime = rtcMillis();
+    uint64_t oldTime = rtcMillis();
     unsigned long timeTaken = millis();
 
     configTime(0, 0, prefs.ntpServer);
@@ -635,7 +635,7 @@ void pollAllSensors()
   }
 #endif
 
-  readings.timestamp = rtcSecs();
+  readings.timestampS = rtcSecs();
 
   Readings *readingsCopy = new Readings(readings);
   enqueueReadings(readingsCopy);
@@ -762,7 +762,9 @@ void setup()
 
   WakeupTask *wt = priorityQueuePop(wakeupTasksQ);
   // make times in the past to 1 sec
-  int64_t willWakeInMs = max(500LL, (wt->timestamp - rtcMillis()));
+  int64_t diff = static_cast<int64_t>(wt->timestamp) - static_cast<int64_t>(rtcMillis());
+  uint64_t willWakeInMs = max(500LL, diff);
+
   wakeupReasonsBitset = wt->wakeupReasonsBitset;
 
   Serial.print("\nAwakeFor: ");
