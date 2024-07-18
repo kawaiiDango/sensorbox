@@ -38,7 +38,7 @@
 // #include <DFRobot_AGS01DB.h>
 
 // #define VOC_PREHEAT_TIMEOUT (3 * 60 * 1000)
-#define TOUCH_PIN 32
+#define TOUCH_PIN 36
 #define LED_PIN 5
 
 #endif
@@ -103,7 +103,7 @@ void pollBmp280()
     readings.pressure = pressureEvent.pressure;
 
     // go to sleep
-    bmp.setSampling(Adafruit_BMP280::MODE_SLEEP,      /* Operating Mode. */
+    bmp.setSampling(Adafruit_BMP280::MODE_SLEEP,       /* Operating Mode. */
                     Adafruit_BMP280::SAMPLING_X1,      /* Temp. oversampling */
                     Adafruit_BMP280::SAMPLING_X1,      /* Pressure oversampling */
                     Adafruit_BMP280::FILTER_OFF,       /* Filtering. */
@@ -265,58 +265,6 @@ void updateLcdStatus(bool enable)
   enableBacklight(enable);
 }
 
-void startSds()
-{
-  Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
-  SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
-
-  pinMode(SDS_POWER_PIN, OUTPUT);
-  rtc_gpio_hold_dis((gpio_num_t)SDS_POWER_PIN);
-  digitalWrite(SDS_POWER_PIN, HIGH);
-  rtc_gpio_hold_en((gpio_num_t)SDS_POWER_PIN);
-
-  delay(100);
-
-  auto rms = sds.setQueryReportingMode();
-
-  if (!rms.isOk())
-    ESP_LOGE(TAG_SENSORS_POLL, "Could not setQueryReportingMode: %s", rms.statusToString().c_str());
-
-  auto wps = sds.setCustomWorkingPeriod(10);
-
-  if (!wps.isOk())
-    ESP_LOGE(TAG_SENSORS_POLL, "Could not setCustomWorkingPeriod: %s", wps.statusToString().c_str());
-
-  Serial.println("startSds");
-}
-
-void pollSds()
-{
-  Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
-  SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
-
-  auto pm = sds.queryPm();
-  auto wsr = sds.sleep();
-
-  pinMode(SDS_POWER_PIN, OUTPUT);
-  rtc_gpio_hold_dis((gpio_num_t)SDS_POWER_PIN);
-  digitalWrite(SDS_POWER_PIN, LOW);
-  rtc_gpio_hold_en((gpio_num_t)SDS_POWER_PIN);
-
-  if (!pm.isOk())
-  {
-    ESP_LOGE(TAG_SENSORS_POLL, "Could not queryPm: %s", pm.statusToString().c_str());
-    return;
-  }
-
-  if (!wsr.isOk())
-    ESP_LOGE(TAG_SENSORS_POLL, "Could not sleep: %s", wsr.statusToString().c_str());
-
-  oobLastPm25 = pm.pm25;
-  oobLastPm10 = pm.pm10;
-  oobValuesUsed = false;
-}
-
 uint16_t scd41_measureSingleShotNoWait()
 {
   uint16_t error;
@@ -441,9 +389,44 @@ void changeScd41Settings()
   ESP_LOGW(TAG_SENSORS_POLL, "scd41 settings modified and persisted");
 }
 
+void stopScd41()
+{
+  SensirionI2CScd4x scd41;
+  Wire.begin();
+  scd41.begin(Wire);
+  uint16_t error = scd41.stopPeriodicMeasurement();
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  scd41Inited = false;
+}
+
+void startScd41()
+{
+  SensirionI2CScd4x scd41;
+  Wire.begin();
+  scd41.begin(Wire);
+  uint16_t error = scd41.startLowPowerPeriodicMeasurement();
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  scd41Inited = true;
+}
+
 // to be run after reading pressure
 void pollScd41()
 {
+  if (!scd41Inited)
+  {
+    return;
+  }
+
   SensirionI2CScd4x scd41;
   uint16_t error;
   uint16_t co2 = 0;
@@ -451,21 +434,6 @@ void pollScd41()
   float humidity = 0.0f;
 
   scd41.begin(Wire);
-
-  // setup
-  if (!scd41Inited)
-  {
-    scd41.stopPeriodicMeasurement();
-
-    error = scd41.startLowPowerPeriodicMeasurement();
-    if (error)
-    {
-      scd41PrintError(error);
-      return;
-    }
-
-    scd41Inited = true;
-  }
 
   // read prev measurement
   error = scd41.readMeasurement(co2, temperature, humidity);
@@ -506,6 +474,61 @@ void pollScd41()
   //   scd41PrintError(error);
   //   return;
   // }
+}
+
+void startSds()
+{
+  stopScd41();
+
+  pinMode(SDS_POWER_PIN, OUTPUT);
+  rtc_gpio_hold_dis((gpio_num_t)SDS_POWER_PIN);
+  digitalWrite(SDS_POWER_PIN, HIGH);
+  rtc_gpio_hold_en((gpio_num_t)SDS_POWER_PIN);
+
+  delay(100);
+  Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
+  SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
+
+  auto rms = sds.setQueryReportingMode();
+
+  if (!rms.isOk())
+    ESP_LOGE(TAG_SENSORS_POLL, "Could not setQueryReportingMode: %s", rms.statusToString().c_str());
+
+  auto wps = sds.setCustomWorkingPeriod(10);
+
+  if (!wps.isOk())
+    ESP_LOGE(TAG_SENSORS_POLL, "Could not setCustomWorkingPeriod: %s", wps.statusToString().c_str());
+
+  Serial.println("startSds");
+}
+
+void pollSds()
+{
+  Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
+  SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
+
+  auto pm = sds.queryPm();
+  auto wsr = sds.sleep();
+
+  pinMode(SDS_POWER_PIN, OUTPUT);
+  rtc_gpio_hold_dis((gpio_num_t)SDS_POWER_PIN);
+  digitalWrite(SDS_POWER_PIN, LOW);
+  rtc_gpio_hold_en((gpio_num_t)SDS_POWER_PIN);
+
+  if (!pm.isOk())
+  {
+    ESP_LOGE(TAG_SENSORS_POLL, "Could not queryPm: %s", pm.statusToString().c_str());
+    return;
+  }
+
+  if (!wsr.isOk())
+    ESP_LOGE(TAG_SENSORS_POLL, "Could not sleep: %s", wsr.statusToString().c_str());
+
+  oobLastPm25 = pm.pm25;
+  oobLastPm10 = pm.pm10;
+  oobValuesUsed = false;
+
+  startScd41();
 }
 
 void pollAudio(void *arg)

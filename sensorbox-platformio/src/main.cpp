@@ -648,7 +648,7 @@ void calibrateTouchTask(void *arg)
   uint16_t touch;
 
   if (wasTouchpadWakeup)
-    delay(2000);
+    delay(10000);
 
   // calculate the avarage value
   while (true)
