@@ -2,13 +2,8 @@
 
 #include <Arduino.h>
 #include "cbor.h"
+#include <my_config.h>
 
-#define THE_BOX
-#define ENABLE_LOW_BATTERY_SHUTDOWN
-// #define PRINT_CBOR
-
-#define BUTTON_PIN 27
-#define DEBUG_BAUD_RATE 115200
 #define APR_20_2023_S 1681948800
 #define COMPLETE_TASK                                          \
     xEventGroupSetBits(pollingEventGroup, 1 << (uint32_t)arg); \
@@ -124,9 +119,6 @@ void setCpuFreqIfNeeded(int mhz)
     {
         setCpuFrequencyMhz(mhz);
         Serial.updateBaudRate(DEBUG_BAUD_RATE);
-#ifdef THE_BOX
-        Serial2.updateBaudRate(9600);
-#endif
     }
 }
 

@@ -346,8 +346,6 @@ void apModeLoop()
         return;
     }
 
-    WiFi.setTxPower(WIFI_POWER_2dBm);
-
     result = dnsServer.start(53, "*", WiFi.softAPIP());
 
     if (!result)
@@ -362,6 +360,8 @@ void apModeLoop()
 
     Serial.println("AP mode started");
     attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonPressed, FALLING);
+
+    WiFi.setTxPower(WIFI_POWER_2dBm);
 
     while (millis() < AP_MODE_TIMEOUT && !apModeDone)
     {

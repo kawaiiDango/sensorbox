@@ -20,7 +20,7 @@ I took a bunch of sensors and shoved them into a box.
 
 ## Wiring
 
-Regex search for "#define .+\_PIN" in the project to find the pin assignments.
+See `my_config.h` to find the pin assignments.
 
 I2C devices are connected to the default I2C pins (21 and 22).
 

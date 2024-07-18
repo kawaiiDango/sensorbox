@@ -9,17 +9,17 @@
  */
 
 #pragma once
+
+#include <my_config.h>
+
+#ifdef THE_BOX
+
 #include <driver/i2s_std.h>
 #include "esp_dsp.h"
 #include "sos-iir-filter.h"
 #include "freertos/semphr.h"
 
 #define TAG_AUDIO "audio_read"
-#define I2S_WS_PIN 13
-#define I2S_SCK_PIN 14
-#define I2S_SD_PIN 35
-// The mic is powered from a gpio pin to allow it to be turned off when not in use
-#define MIC_POWER_PIN 4
 
 //
 // Sampling
@@ -436,3 +436,5 @@ void audio_read(float *dbA, float *dbZ, u_int8_t *fft_resampled)
     ESP_LOGE(TAG_AUDIO, "Queue receive failed");
     mic_i2s_reader_task_read = false;
 }
+
+#endif

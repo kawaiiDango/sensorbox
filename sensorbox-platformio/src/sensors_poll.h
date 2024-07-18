@@ -2,7 +2,6 @@
 
 #include <my_buffers.h>
 #include <my_utils.h>
-#include <DFRobot_DHT20.h>
 
 #ifdef THE_BOX
 
@@ -14,36 +13,14 @@
 #include <SensirionI2cSht4x.h>
 #include <SensirionI2CScd4x.h>
 #include "audio_read.h"
-
 #define PM_SENSOR_RUNTIME_SECS (31)
-
-#define PIR_PIN 36
-#define TOUCH_PIN 0
-#define SDS_POWER_PIN 25
-#define SDS_TX_PIN 16
-#define SDS_RX_PIN 17
-#define LCD_RST_PIN 26
-#define LCD_CS_PIN 12
-#define LCD_DC_PIN 15
-#define LCD_DIN_PIN 23
-#define LCD_CLK_PIN 18
-#define LCD_BACKLIGHT_PIN 2
-#define LED_PIN 2
-#define LCD_INVERSE false    // set to true to invert display pixel color
-#define MY_LCD_CONTRAST 0xB1 // default is 0xBF set in LCDinit, Try 0xB1 <-> 0xBF if your display is too dark/dim
-#define MY_LCD_BIAS 0x12     // LCD bias mode 1:48: Try 0x12 or 0x13 or 0x14
 
 #else
 
+#include <DFRobot_DHT20.h>
 // #include <DFRobot_AGS01DB.h>
 
-// #define VOC_PREHEAT_TIMEOUT (3 * 60 * 1000)
-#define TOUCH_PIN 36
-#define LED_PIN 5
-
 #endif
-
-#define EXTERNAL_BATTERY_VOLTAGE_PIN 34
 
 const char *TAG_SENSORS_POLL = "sensors_poll";
 
@@ -583,11 +560,11 @@ void pollBatteryVoltage(void *arg)
   float v = 0;
   int rounds = 10;
 
-  pinMode(EXTERNAL_BATTERY_VOLTAGE_PIN, INPUT);
+  pinMode(BATTERY_VOLTAGE_PIN, INPUT);
 
   for (int i = 0; i < rounds; i++)
   {
-    v += (float)analogReadMilliVolts(EXTERNAL_BATTERY_VOLTAGE_PIN) * 2 / 1000;
+    v += (float)analogReadMilliVolts(BATTERY_VOLTAGE_PIN) * 2 / 1000;
   }
 
   v /= rounds;

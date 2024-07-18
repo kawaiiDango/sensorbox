@@ -16,8 +16,6 @@
 #include <ArduinoOTA.h>
 #endif
 
-#define NTP_SYNC_INTERVAL_S 60 * 60 * 2 // 2 hours
-
 const char *TAG_MAIN = "main";
 
 // sleep stuff
