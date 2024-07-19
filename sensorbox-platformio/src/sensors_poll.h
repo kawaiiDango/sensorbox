@@ -39,7 +39,7 @@ RTC_DATA_ATTR float oobLastPm10 = NAN;
 RTC_DATA_ATTR short oobLastCo2 = -1;
 RTC_DATA_ATTR bool oobValuesUsed = false;
 RTC_DATA_ATTR bool scd41Inited = false;
-RTC_DATA_ATTR bool scd41FirstReadingDiscarded = false;
+RTC_DATA_ATTR float lastBatteryVoltage = -1;
 
 #else
 RTC_DATA_ATTR int64_t vocStartTime = 0;
@@ -193,11 +193,10 @@ void pollTSL2591()
   tsl.disable();
 }
 
-void pollPir(void *arg)
+void pollPir()
 {
   pinMode(PIR_PIN, INPUT);
   readings.motion = digitalRead(PIR_PIN) == HIGH;
-  COMPLETE_TASK
 }
 
 void enableBacklight(bool enabled)
@@ -399,7 +398,8 @@ void startScd41()
 // to be run after reading pressure
 void pollScd41()
 {
-  if (!scd41Inited)
+  // don't take readings at arbritary times if not idle
+  if (!scd41Inited || !isIdle())
   {
     return;
   }
@@ -424,15 +424,8 @@ void pollScd41()
   }
   else
   {
-    if (scd41FirstReadingDiscarded)
-    {
-      readings.co2 = co2;
-      oobLastCo2 = co2;
-    }
-    else
-    {
-      scd41FirstReadingDiscarded = true;
-    }
+    readings.co2 = co2;
+    oobLastCo2 = co2;
     ESP_LOGW(TAG_SENSORS_POLL, "CO2: %d, Temperature: %.2f / %.2f, Humidity: %.2f / %.2f", co2, temperature, readings.temperature, humidity, readings.humidity);
   }
 
@@ -557,44 +550,75 @@ void pollDht20()
 
 void pollBatteryVoltage(void *arg)
 {
-  float v = 0;
+  float sum = 0;
   int rounds = 10;
+  float vReadings[rounds];
+  float mean;
+  int filteredCount = 0;
 
   pinMode(BATTERY_VOLTAGE_PIN, INPUT);
 
+  // First Pass: Collect readings
   for (int i = 0; i < rounds; i++)
   {
-    v += (float)analogReadMilliVolts(BATTERY_VOLTAGE_PIN) * 2 / 1000;
+    vReadings[i] = (float)analogReadMilliVolts(BATTERY_VOLTAGE_PIN) * 2 / 1000;
+    sum += vReadings[i];
   }
 
-  v /= rounds;
+  // prelininary mean
+  mean = sum / rounds;
 
-#ifdef THE_BOX
-  v = mapf(v, 3.94, 4.20, 3.85, 4.10); // for the firebeetle 2
-  // v = mapf(v, 3.71, 4.25, 3.60, 4.15); // for the firebeetle 2, old calibration
-#else
-  v = mapf(v, 3.88, 4.15, 3.84, 4.10); // for the lolin clone
-#endif
+  // Outlier Filtering: Define a threshold for what you consider an outlier
+  float threshold = 0.05;
 
-#ifdef ENABLE_LOW_BATTERY_SHUTDOWN
-  if (v > 0.6 && v < 3.5)
+  sum = 0; // Reset sum for the second pass
+
+  for (int i = 0; i < rounds; i++)
   {
-#ifdef THE_BOX
-
-    rtc_gpio_hold_dis((gpio_num_t)SDS_POWER_PIN);
-#endif
-
-    ESP_LOGE(TAG_SENSORS_POLL, "Battery voltage too low: %f, going to sleep", v);
-    Serial.flush();
-    esp_deep_sleep_start();
+    if (fabs(vReadings[i] - mean) <= threshold)
+    {
+      filteredCount++;
+      sum += vReadings[i];
+    }
   }
+
+  mean = sum / filteredCount;
+
+#ifdef THE_BOX
+  mean = mapf(mean, 3.94, 4.20, 3.85, 4.10); // for the firebeetle 2
+  // mean = mapf(mean, 3.71, 4.25, 3.60, 4.15); // for the firebeetle 2, old calibration
+#else
+  mean = mapf(v, 3.88, 4.15, 3.84, 4.10); // for the lolin clone
 #endif
-  readings.voltageAvg = v;
+
+  bool isSpike = lastBatteryVoltage > 0 && fabs(lastBatteryVoltage - mean) > threshold;
+
+  // prevent spikes from shutting down the device
+  if (!isSpike)
+  {
+#ifdef ENABLE_LOW_BATTERY_SHUTDOWN
+    if (mean > 0.6 && mean < 3.5)
+    {
+
+#ifdef THE_BOX
+      rtc_gpio_hold_dis((gpio_num_t)SDS_POWER_PIN);
+      stopScd41();
+#endif
+
+      ESP_LOGE(TAG_SENSORS_POLL, "Battery voltage too low: %f, going to sleep", mean);
+      Serial.flush();
+      esp_deep_sleep_start();
+    }
+#endif
+  }
+
+  readings.voltageAvg = mean;
+  lastBatteryVoltage = mean;
 
   COMPLETE_TASK
 }
 
-void pollI2cSensors(void *arg)
+void pollMainSensors(void *arg)
 {
   Wire.begin();
 #ifdef THE_BOX
@@ -602,6 +626,7 @@ void pollI2cSensors(void *arg)
   pollTSL2591();
   pollBmp280();
   pollScd41();
+  pollPir();
 
 #else
   pollDht20();

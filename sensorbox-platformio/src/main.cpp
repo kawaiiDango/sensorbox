@@ -594,11 +594,10 @@ void pollAllSensors()
   readings = invalidReadings;
   pollingCtr = 0;
 
-  createPollingTask(pollI2cSensors, "pollI2cSensors");
+  createPollingTask(pollMainSensors, "pollMainSensors");
   createPollingTask(pollBatteryVoltage, "pollBatteryVoltage");
 
 #ifdef THE_BOX
-  createPollingTask(pollPir, "pollPir");
   createPollingTask(pollAudio, "pollAudio");
 
   // if (rtcMillis() - sdsStartTime > prefs.collectIntvlMs * prefs.pmSensorEvery)
