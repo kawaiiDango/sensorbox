@@ -85,17 +85,12 @@ coap_response_t message_handler(coap_session_t *session,
 {
     const unsigned char *data = NULL;
     size_t data_len;
-    size_t offset;
-    size_t total;
     coap_pdu_code_t rcvd_code = coap_pdu_get_code(received);
 
     if (rcvd_code == COAP_RESPONSE_CODE_CREATED || rcvd_code == COAP_RESPONSE_CODE_CHANGED) // measurement created
     {
-        if (coap_get_data_large(received, &data_len, &data, &offset, &total))
+        if (coap_get_data(received, &data_len, &data))
         {
-            if (data_len != total)
-                printf("Unexpected partial data received offset %u, length %u\n", offset, data_len);
-
             coap_mid_t sent_mid = strtol((const char *)data, NULL, 16);
 
             if (sent_mid != 0)
@@ -341,8 +336,10 @@ void coap_client_cleanup()
             if (meta.readings == NULL)
                 continue;
 
-            ESP_LOGE(TAG_REPORTER, "Readings %u not sent", meta.readings->timestampS);
             enqueueReadings(meta.readings);
+
+            if (meta.pdu)
+                coap_delete_pdu(meta.pdu);
         }
     }
 
@@ -407,7 +404,7 @@ coap_pdu_t *coap_create_my_pdu(const char *path, coap_pdu_code_t req_code, coap_
     coap_add_optlist_pdu(request, &optlist);
 
     if (data_len > 0 && data != NULL)
-        coap_add_data_large_request(coap_session, request, data_len, data, NULL, NULL);
+        coap_add_data(request, data_len, data);
 
     if (optlist)
     {
@@ -441,7 +438,7 @@ void coap_io_loop(void *arg)
 
             if (mid == COAP_INVALID_MID)
             {
-                ESP_LOGE(TAG_REPORTER, "coap_send failed");
+                ESP_LOGE(TAG_REPORTER, "coap_send failed, free heap: %u", ESP.getFreeHeap());
                 goto finish;
             }
             else if (meta.readings != NULL)

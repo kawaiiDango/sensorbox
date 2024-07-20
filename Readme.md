@@ -16,7 +16,8 @@ I took a bunch of sensors and shoved them into a box.
 - MT3608 DC-DC step-up converter (To power the 5V PM sensor from the 3.7V battery)
 - IRLZ44N MOSFET (To switch the MT3608 (and so the PM sensor) on and off)
 - PCD8544 LCD display
-- Resistors for the LCD backlight pin, and I2C pullups
+- Resistor for the LCD backlight LED pin
+- Resistors for I2C pullups (Do not add if your sensor modules already have them)
 
 ## Wiring
 
@@ -107,6 +108,7 @@ It currently uses topics for: the widget, daily digests and one for Grafana aler
 
 ## Credits
 
+- Thanks Jason for maintaining a platformio-arduino 3.0 fork (Jason2866/platform-espressif32)[https://github.com/Jason2866/platform-espressif32]
 - https://github.com/SpoturDeal/ESP32-dBmeter-with-MQTT and https://github.com/ikostoski/esp32-i2s-slm for the INMP441 driver
 - https://github.com/adafruit/Adafruit_BMP280_Library
 - https://github.com/DFRobot/DFRobot_DHT20
