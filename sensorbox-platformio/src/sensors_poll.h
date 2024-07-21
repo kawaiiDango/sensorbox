@@ -75,16 +75,30 @@ void pollBmp280()
 
   if (bmp.begin(0x76)) // this sets mode to normal again
   {
-    bmp_pressure->getEvent(&pressureEvent);
-
-    readings.pressure = pressureEvent.pressure;
-
+    // take measurement
     // go to sleep
-    bmp.setSampling(Adafruit_BMP280::MODE_SLEEP,       /* Operating Mode. */
-                    Adafruit_BMP280::SAMPLING_X1,      /* Temp. oversampling */
-                    Adafruit_BMP280::SAMPLING_X1,      /* Pressure oversampling */
-                    Adafruit_BMP280::FILTER_OFF,       /* Filtering. */
+    // I am getting occational downward spikes with this setup, so commenting it out
+    // bmp.setSampling(Adafruit_BMP280::MODE_SLEEP,       /* Operating Mode. */
+    //                 Adafruit_BMP280::SAMPLING_X1,      /* Temp. oversampling */
+    //                 Adafruit_BMP280::SAMPLING_X1,      /* Pressure oversampling */
+    //                 Adafruit_BMP280::FILTER_OFF,       /* Filtering. */
+    //                 Adafruit_BMP280::STANDBY_MS_4000); /* Standby time. */
+
+    bmp.setSampling(Adafruit_BMP280::MODE_FORCED,      /* Operating Mode. */
+                    Adafruit_BMP280::SAMPLING_X16,     /* Temp. oversampling */
+                    Adafruit_BMP280::SAMPLING_X16,     /* Pressure oversampling */
+                    Adafruit_BMP280::FILTER_X4,        /* Filtering. */
                     Adafruit_BMP280::STANDBY_MS_4000); /* Standby time. */
+
+    if (bmp.takeForcedMeasurement())
+    {
+      bmp_pressure->getEvent(&pressureEvent);
+      readings.pressure = pressureEvent.pressure;
+    }
+    else
+    {
+      ESP_LOGE(TAG_SENSORS_POLL, "bmp.takeForcedMeasurement() failed");
+    }
   }
   else
   {
@@ -430,12 +444,16 @@ void pollScd41()
   }
 
   // set params for the next measurement
-  error = scd41.setAmbientPressure((uint16_t)readings.pressure);
 
-  if (error)
+  if (!isnan(readings.pressure))
   {
-    scd41PrintError(error);
-    return;
+    error = scd41.setAmbientPressure((uint16_t)readings.pressure);
+
+    if (error)
+    {
+      scd41PrintError(error);
+      return;
+    }
   }
 
   // error = scd41.measureSingleShot();
@@ -623,8 +641,8 @@ void pollMainSensors(void *arg)
   Wire.begin();
 #ifdef THE_BOX
   pollSht41();
-  pollTSL2591();
   pollBmp280();
+  pollTSL2591();
   pollScd41();
   pollPir();
 
