@@ -36,15 +36,16 @@ bool lcdSleeping = false;
 
 RTC_DATA_ATTR float oobLastPm25 = NAN;
 RTC_DATA_ATTR float oobLastPm10 = NAN;
-RTC_DATA_ATTR short oobLastCo2 = -1;
+RTC_DATA_ATTR short lastCo2 = -1;
+RTC_DATA_ATTR short lastPressure = -1;
 RTC_DATA_ATTR bool oobValuesUsed = false;
 RTC_DATA_ATTR bool scd41Inited = false;
-RTC_DATA_ATTR float lastBatteryVoltage = -1;
-
 #else
 RTC_DATA_ATTR int64_t vocStartTime = 0;
 #endif
+
 Readings readings;
+RTC_DATA_ATTR float lastBatteryVoltage = -1;
 
 uint32_t pollingCtr = 0;
 EventGroupHandle_t pollingEventGroup = xEventGroupCreate();
@@ -94,6 +95,7 @@ void pollBmp280()
     {
       bmp_pressure->getEvent(&pressureEvent);
       readings.pressure = pressureEvent.pressure;
+      lastPressure = readings.pressure;
     }
     else
     {
@@ -406,6 +408,17 @@ void startScd41()
     return;
   }
 
+  if (lastPressure > 0)
+  {
+    error = scd41.setAmbientPressure(lastPressure);
+
+    if (error)
+    {
+      scd41PrintError(error);
+      return;
+    }
+  }
+
   scd41Inited = true;
 }
 
@@ -439,15 +452,16 @@ void pollScd41()
   else
   {
     readings.co2 = co2;
-    oobLastCo2 = co2;
-    ESP_LOGW(TAG_SENSORS_POLL, "CO2: %d, Temperature: %.2f / %.2f, Humidity: %.2f / %.2f", co2, temperature, readings.temperature, humidity, readings.humidity);
+    lastCo2 = co2;
+    ESP_LOGW(TAG_SENSORS_POLL, "CO2: %d, Temperature: %.2f / %.2f, Humidity: %.2f / %.2f",
+             co2, temperature, readings.temperature, humidity, readings.humidity);
   }
 
   // set params for the next measurement
 
-  if (!isnan(readings.pressure))
+  if (lastPressure > 0)
   {
-    error = scd41.setAmbientPressure((uint16_t)readings.pressure);
+    error = scd41.setAmbientPressure(lastPressure);
 
     if (error)
     {
@@ -606,7 +620,7 @@ void pollBatteryVoltage(void *arg)
   mean = mapf(mean, 3.94, 4.20, 3.85, 4.10); // for the firebeetle 2
   // mean = mapf(mean, 3.71, 4.25, 3.60, 4.15); // for the firebeetle 2, old calibration
 #else
-  mean = mapf(v, 3.88, 4.15, 3.84, 4.10); // for the lolin clone
+  mean = mapf(mean, 3.88, 4.15, 3.84, 4.10); // for the lolin clone
 #endif
 
   bool isSpike = lastBatteryVoltage > 0 && fabs(lastBatteryVoltage - mean) > threshold;
@@ -660,7 +674,10 @@ void pollBoardStats()
   Serial.printf("Free heap: %.2fK\n", readings.freeHeap / 1024);
 }
 
-void createPollingTask(TaskFunction_t taskFn, const char *taskName, uint32_t stackSize = configMINIMAL_STACK_SIZE * 3, UBaseType_t priority = 1)
+void createPollingTask(TaskFunction_t taskFn,
+                       const char *taskName,
+                       uint32_t stackSize = configMINIMAL_STACK_SIZE * 3,
+                       UBaseType_t priority = 1)
 {
   xTaskCreate(
       taskFn,

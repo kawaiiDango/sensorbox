@@ -34,7 +34,7 @@ bool touchInterruptProcessed = true;
 long touchInterruptTime = 0;
 bool buttonPressedToStartApBool = false;
 
-const uint32_t wifiSecureConnectTimeoutMs = 1000;
+const uint32_t wifiSecureConnectTimeoutMs = 1600;
 const uint32_t wifiConnectTimeoutMs = 500;
 RTC_DATA_ATTR uint8_t lastConnectedWifiChannel = 0;
 RTC_DATA_ATTR uint8_t lastBssid[6] = {0};
@@ -48,7 +48,7 @@ const uint8_t WAKEUP_AP_MODE = 1 << 4;
 
 RTC_DATA_ATTR uint8_t wakeupReasonsBitset = WAKEUP_FIRST_BOOT | WAKEUP_MEASURE;
 
-SemaphoreHandle_t gotIpSemaphore = NULL;
+SemaphoreHandle_t gotIpTaskSemaphore = xSemaphoreCreateBinary();
 char version_str[64];
 
 #ifdef THE_BOX
@@ -212,7 +212,7 @@ void printSensorDataToLcd()
     float irPercent = ((float)readings.ir / readings.visible) * 100;
     sprintf(strbuf,
             "%hd ppm\n%.1f%s %d%s\n%.1f %%IR\n%d/%d touch\n%.2f V\nv%s",
-            oobLastCo2,
+            lastCo2,
             temperatureRead(), "C",
             WiFi.RSSI(), units.rssi,
             irPercent,
@@ -292,7 +292,7 @@ void doOnEveryBoot()
 
   const esp_app_desc_t *appDesc = esp_app_get_description();
 
-  sprintf(version_str, "%s-%sv%s", appDesc->date, appDesc->time, appDesc->version);
+  sprintf(version_str, "%s-%sv%s", prefs.uriPrefix, appDesc->date, appDesc->version);
   Serial.print("Build: ");
   Serial.println(version_str);
 
@@ -411,7 +411,7 @@ void gotIpTask(void *args)
 
     configTime(0, 0, prefs.ntpServer);
     bool gotNetworkTime = false;
-    int maxTries = bitsetContains(wakeupReasonsBitset, WAKEUP_FIRST_BOOT) ? 5 : 1;
+    int maxTries = !isIdle() ? 5 : 1;
 
     for (int tries = 0; tries < maxTries && !gotNetworkTime; tries++)
     {
@@ -444,16 +444,14 @@ void gotIpTask(void *args)
 
   if (rtcSecs() > APR_20_2023_S)
   {
-    coap_loop_running = true;
-
     xTaskCreate(
         coap_io_loop,
         "coap_io_loop",
-        1024 * 4,
+        1024 * 6,
         NULL,
         1,
         NULL);
-    xSemaphoreTake(coap_prepare_semaphore, portMAX_DELAY);
+
     xTaskCreate(
         coap_readings_report_loop,
         "coap_readings_report_loop",
@@ -463,21 +461,20 @@ void gotIpTask(void *args)
         NULL);
   }
 
-  xSemaphoreGive(gotIpSemaphore);
+  xSemaphoreGive(gotIpTaskSemaphore);
 
   vTaskDelete(NULL);
 }
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
 {
+  setCpuFreqIfNeeded(80);
+
   Serial.print("Got IP address: ");
   Serial.print(WiFi.localIP());
   Serial.print(" in ");
   Serial.println(millis() - timeItTime);
 
-  setCpuFreqIfNeeded(80);
-
-  gotIpSemaphore = xSemaphoreCreateBinary();
   xTaskCreate(
       gotIpTask,
       "gotIpTask",
@@ -644,6 +641,8 @@ void calibrateTouchTask(void *arg)
   uint16_t totalTouchValue;
   uint16_t touch;
 
+  touchAttachInterrupt(TOUCH_PIN, touchCallback, touchThreshold);
+
   if (wasTouchpadWakeup)
     delay(10000);
 
@@ -673,9 +672,6 @@ void calibrateTouchTask(void *arg)
     }
     // touch
     touchAttachInterrupt(TOUCH_PIN, touchCallback, touchThreshold);
-
-    // wakeup
-    esp_sleep_enable_touchpad_wakeup();
 
     delay(10 * 1000);
   }
@@ -744,17 +740,19 @@ void setup()
   // pqPrint(wakeupTasksQ);
   // end
 
-  if (gotIpSemaphore != NULL)
-    xSemaphoreTake(gotIpSemaphore, portMAX_DELAY);
-
-  if (coap_loop_running)
+  if (WiFi.status() == WL_CONNECTED)
   {
-    coap_loop_running = false;
-    xSemaphoreTake(coap_loop_semaphore, portMAX_DELAY);
+    xSemaphoreTake(gotIpTaskSemaphore, portMAX_DELAY);
+
+    if (rtcSecs() > APR_20_2023_S)
+      xSemaphoreTake(coap_loop_semaphore, portMAX_DELAY);
   }
 
-  coap_client_cleanup();
-  esp_wifi_stop();
+  if (WiFi.status() != WL_STOPPED)
+  {
+    WiFi.disconnect(true);
+  }
+
   LittleFS.end();
 
   WakeupTask *wt = priorityQueuePop(wakeupTasksQ);
@@ -771,8 +769,9 @@ void setup()
   Serial.print(" with ");
   Serial.println(wakeupReasonsBitset, BIN);
   Serial.flush();
+  touchAttachInterrupt(TOUCH_PIN, touchCallback, touchThreshold);
+  esp_sleep_enable_touchpad_wakeup();
   esp_sleep_enable_timer_wakeup(willWakeInMs * 1000);
-
   // mark as consumed
   wt->timestamp = 0;
 

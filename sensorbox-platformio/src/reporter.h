@@ -30,10 +30,10 @@ bool coapClientInitialized = false;
 std::map<coap_mid_t, Readings *> coapMessagesSent;
 coap_context_t *coap_ctx = NULL;
 coap_session_t *coap_session = NULL;
-bool coap_loop_running = false;
 QueueHandle_t coap_pdu_queue = xQueueCreate(4, sizeof(struct coap_meta));
 SemaphoreHandle_t coap_loop_semaphore = xSemaphoreCreateBinary();
 SemaphoreHandle_t coap_prepare_semaphore = xSemaphoreCreateBinary();
+bool coap_readings_loop_finished = false;
 
 void coap_client_cleanup();
 
@@ -73,9 +73,9 @@ inline void set_coap_is_active()
     coap_last_active_time = millis();
 }
 
-inline bool coap_is_active()
+bool coap_is_active()
 {
-    return millis() - coap_last_active_time < COAP_TIMEOUT;
+    return ((millis() - coap_last_active_time < COAP_TIMEOUT) && (!coapMessagesSent.empty() || !coap_readings_loop_finished)) || !isIdle();
 }
 
 coap_response_t message_handler(coap_session_t *session,
@@ -304,6 +304,7 @@ void coapPrepareClient()
     }
 
     coapClientInitialized = true;
+    set_coap_is_active();
 
 finish:
     coap_free_address_info(info_list);
@@ -320,7 +321,7 @@ void coap_client_cleanup()
     if (!coapClientInitialized || !coap_ctx)
         return;
 
-    bool done = coapMessagesSent.size() == 0;
+    bool done = coapMessagesSent.empty();
 
     if (!done)
     {
@@ -417,18 +418,19 @@ coap_pdu_t *coap_create_my_pdu(const char *path, coap_pdu_code_t req_code, coap_
 
 void coap_io_loop(void *arg)
 {
+    const int time_between = 25;
+
     if (!coapClientInitialized)
     {
         coapPrepareClient();
         if (!coapClientInitialized)
         {
             ESP_LOGE(TAG_REPORTER, "coapPrepareClient failed");
-            coap_loop_running = false;
             goto finish;
         }
     }
-    set_coap_is_active();
-    while (coap_loop_running || coap_is_active() || !isIdle())
+
+    while (coap_is_active())
     {
         struct coap_meta meta;
         bool q_received = xQueueReceive(coap_pdu_queue, &meta, 0);
@@ -447,11 +449,21 @@ void coap_io_loop(void *arg)
             }
         }
 
-        int time_taken = coap_io_process(coap_ctx, 50);
-        if (time_taken < 0)
+        int total_time = 0;
+
+        // add a delay between sends to prevent network congestion
+        while (total_time < time_between)
         {
-            ESP_LOGE(TAG_REPORTER, "coap_io_process failed");
-            break;
+            int time_taken = coap_io_process(coap_ctx, time_between - total_time);
+            if (time_taken < 0)
+            {
+                ESP_LOGE(TAG_REPORTER, "coap_io_process failed");
+                goto finish;
+            }
+            else
+            {
+                total_time += time_taken;
+            }
         }
     }
 
@@ -482,10 +494,13 @@ void coap_readings_report_loop(void *arg)
         frb_inited = true;
     }
 
-    set_coap_is_active();
+    xSemaphoreTake(coap_prepare_semaphore, portMAX_DELAY);
 
-    while (coapClientInitialized && coap_is_active() && (coap_loop_running || readings != NULL || (frb_inited && frb.size() > 0)))
+    while (coapClientInitialized && coap_is_active())
     {
+        if (readingsBufferIsEmpty(&readingsBuffer) && (frb_inited && frb.size() == 0) && isIdle())
+            break;
+
         readings = readingsBufferPop(&readingsBuffer);
         if (readings == NULL)
         {
@@ -536,5 +551,7 @@ void coap_readings_report_loop(void *arg)
         xQueueSend(coap_pdu_queue, &meta, portMAX_DELAY);
     }
 
+    coap_readings_loop_finished = true;
+    Serial.println("coap_readings_report_loop finished");
     vTaskDelete(NULL);
 }

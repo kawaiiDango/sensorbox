@@ -108,7 +108,7 @@ It currently uses topics for: the widget, daily digests and one for Grafana aler
 
 ## Credits
 
-- Thanks Jason for maintaining a platformio-arduino 3.0 fork (Jason2866/platform-espressif32)[https://github.com/Jason2866/platform-espressif32]
+- Thanks Jason for maintaining a platformio-arduino 3.0 fork [Jason2866/platform-espressif32](https://github.com/Jason2866/platform-espressif32)
 - https://github.com/SpoturDeal/ESP32-dBmeter-with-MQTT and https://github.com/ikostoski/esp32-i2s-slm for the INMP441 driver
 - https://github.com/adafruit/Adafruit_BMP280_Library
 - https://github.com/DFRobot/DFRobot_DHT20
