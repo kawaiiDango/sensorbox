@@ -19,7 +19,7 @@
 const char *TAG_MAIN = "main";
 
 // sleep stuff
-RTC_DATA_ATTR uint8_t measureCountModPm = 0;
+// RTC_DATA_ATTR uint8_t measureCountModPm = 0;
 RTC_DATA_ATTR uint8_t measureCountModSubmit = 0;
 RTC_DATA_ATTR uint8_t measureCountModNtp = 0;
 const int collectingIntervalActive = 6000;
@@ -44,7 +44,8 @@ const uint8_t WAKEUP_FIRST_BOOT = 1 << 0;
 const uint8_t WAKEUP_MEASURE = 1 << 1;
 const uint8_t WAKEUP_SUBMIT = 1 << 2;
 const uint8_t WAKEUP_MEASURE_PM = 1 << 3;
-const uint8_t WAKEUP_AP_MODE = 1 << 4;
+const uint8_t WAKEUP_MEASURE_CO2_ONLY = 1 << 4;
+const uint8_t WAKEUP_AP_MODE = 1 << 5;
 
 RTC_DATA_ATTR uint8_t wakeupReasonsBitset = WAKEUP_FIRST_BOOT | WAKEUP_MEASURE;
 
@@ -342,6 +343,9 @@ void doWhileAwakeLoop()
 #ifdef THE_BOX
   if (!isIdle())
     printSensorDataToLcd();
+
+  if (bitsetContains(wakeupReasonsBitset, WAKEUP_FIRST_BOOT))
+    initScd41(); // init after reading pressure
 #endif
 
   while (!isIdle())
@@ -591,8 +595,8 @@ void pollAllSensors()
   readings = invalidReadings;
   pollingCtr = 0;
 
-  createPollingTask(pollMainSensors, "pollMainSensors");
   createPollingTask(pollBatteryVoltage, "pollBatteryVoltage");
+  createPollingTask(pollMainSensors, "pollMainSensors");
 
 #ifdef THE_BOX
   createPollingTask(pollAudio, "pollAudio");
@@ -699,6 +703,9 @@ void setup()
 
     bitsetAdd(nextWakeupReasonsBitset, WAKEUP_MEASURE);
 
+    if (prefs.collectIntvlMs > 60000)
+      priorityQueueWrite(wakeupTasksQ, WakeupTask{WAKEUP_MEASURE_CO2_ONLY, rtcMillis() + prefs.collectIntvlMs / 2});
+
     measureCountModPm = (measureCountModPm + 1) % prefs.pmSensorEvery;
     measureCountModSubmit = (measureCountModSubmit + 1) % (prefs.reportIntvlMs / prefs.collectIntvlMs);
     measureCountModNtp = (measureCountModNtp + 1) % (NTP_SYNC_INTERVAL_S * 1000 / prefs.collectIntvlMs);
@@ -726,6 +733,12 @@ void setup()
   if (bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_PM))
   {
     pollSds();
+  }
+
+  if (bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_CO2_ONLY) && !sdsRunning)
+  {
+    Wire.begin();
+    pollScd41();
   }
 #endif
 
@@ -760,6 +773,9 @@ void setup()
   int64_t diff = static_cast<int64_t>(wt->timestamp) - static_cast<int64_t>(rtcMillis());
   uint64_t willWakeInMs = max(500LL, diff);
 
+  if (!bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_CO2_ONLY) || sdsRunning)
+    lastAwakeDuration = millis();
+
   wakeupReasonsBitset = wt->wakeupReasonsBitset;
 
   Serial.print("\nAwakeFor: ");
@@ -775,7 +791,6 @@ void setup()
   // mark as consumed
   wt->timestamp = 0;
 
-  lastAwakeDuration = millis();
   esp_deep_sleep_start();
 }
 

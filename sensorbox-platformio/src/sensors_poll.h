@@ -39,12 +39,14 @@ RTC_DATA_ATTR float oobLastPm10 = NAN;
 RTC_DATA_ATTR short lastCo2 = -1;
 RTC_DATA_ATTR short lastPressure = -1;
 RTC_DATA_ATTR bool oobValuesUsed = false;
-RTC_DATA_ATTR bool scd41Inited = false;
+RTC_DATA_ATTR bool sdsRunning = false;
+
 #else
 RTC_DATA_ATTR int64_t vocStartTime = 0;
 #endif
 
 Readings readings;
+RTC_DATA_ATTR uint8_t measureCountModPm = 0;
 RTC_DATA_ATTR float lastBatteryVoltage = -1;
 
 uint32_t pollingCtr = 0;
@@ -275,6 +277,37 @@ uint16_t scd41_measureSingleShotNoWait()
   return error;
 }
 
+uint16_t SensirionI2CScd4x_getAmbientPressure(uint16_t &ambientPressure)
+{
+  uint16_t error;
+  uint8_t buffer[3];
+  SensirionI2CTxFrame txFrame(buffer, 3);
+
+  error = txFrame.addCommand(0xe000);
+  if (error)
+  {
+    return error;
+  }
+
+  error = SensirionI2CCommunication::sendFrame(0x62, txFrame, Wire);
+  if (error)
+  {
+    return error;
+  }
+
+  delay(1);
+
+  SensirionI2CRxFrame rxFrame(buffer, 3);
+  error = SensirionI2CCommunication::receiveFrame(0x62, 3, rxFrame, Wire);
+  if (error)
+  {
+    return error;
+  }
+
+  error |= rxFrame.getUInt16(ambientPressure);
+  return error;
+}
+
 void scd41PrintError(uint16_t error)
 {
   char errorMessage[256];
@@ -380,10 +413,28 @@ void changeScd41Settings()
 
   ESP_LOGW(TAG_SENSORS_POLL, "scd41 settings modified and persisted");
 }
+uint16_t SensirionI2CScd4x_measureSingleShot()
+{
+  uint16_t error;
+  uint8_t buffer[2];
+  SensirionI2CTxFrame txFrame(buffer, 2);
 
-void stopScd41()
+  error = txFrame.addCommand(0x219D);
+  if (error)
+  {
+    return error;
+  }
+
+  error = SensirionI2CCommunication::sendFrame(0x62, txFrame, Wire);
+  return error;
+}
+
+void initScd41()
 {
   SensirionI2CScd4x scd41;
+  uint16_t co2 = 0;
+  float temperature = 0.0f;
+  float humidity = 0.0f;
   Wire.begin();
   scd41.begin(Wire);
   uint16_t error = scd41.stopPeriodicMeasurement();
@@ -393,40 +444,29 @@ void stopScd41()
     return;
   }
 
-  scd41Inited = false;
-}
-
-void startScd41()
-{
-  SensirionI2CScd4x scd41;
-  Wire.begin();
-  scd41.begin(Wire);
-  uint16_t error = scd41.startLowPowerPeriodicMeasurement();
+  error = scd41.setAmbientPressure(lastPressure);
   if (error)
   {
     scd41PrintError(error);
     return;
   }
 
-  if (lastPressure > 0)
+  error = scd41.measureSingleShot();
+  if (error)
   {
-    error = scd41.setAmbientPressure(lastPressure);
-
-    if (error)
-    {
-      scd41PrintError(error);
-      return;
-    }
+    scd41PrintError(error);
+    return;
   }
 
-  scd41Inited = true;
+  // discard first reading
+  scd41.readMeasurement(co2, temperature, humidity);
 }
 
 // to be run after reading pressure
 void pollScd41()
 {
   // don't take readings at arbritary times if not idle
-  if (!scd41Inited || !isIdle())
+  if (!isIdle())
   {
     return;
   }
@@ -471,21 +511,24 @@ void pollScd41()
   }
 
   // error = scd41.measureSingleShot();
-  // if (error)
-  // {
-  //   scd41PrintError(error);
-  //   return;
-  // }
+  error = SensirionI2CScd4x_measureSingleShot();
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
 }
 
 void startSds()
 {
-  stopScd41();
+  // stopScd41();
 
   pinMode(SDS_POWER_PIN, OUTPUT);
   rtc_gpio_hold_dis((gpio_num_t)SDS_POWER_PIN);
   digitalWrite(SDS_POWER_PIN, HIGH);
   rtc_gpio_hold_en((gpio_num_t)SDS_POWER_PIN);
+
+  sdsRunning = true;
 
   delay(100);
   Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
@@ -517,6 +560,8 @@ void pollSds()
   digitalWrite(SDS_POWER_PIN, LOW);
   rtc_gpio_hold_en((gpio_num_t)SDS_POWER_PIN);
 
+  sdsRunning = false;
+
   if (!pm.isOk())
   {
     ESP_LOGE(TAG_SENSORS_POLL, "Could not queryPm: %s", pm.statusToString().c_str());
@@ -529,8 +574,6 @@ void pollSds()
   oobLastPm25 = pm.pm25;
   oobLastPm10 = pm.pm10;
   oobValuesUsed = false;
-
-  startScd41();
 }
 
 void pollAudio(void *arg)
@@ -634,7 +677,6 @@ void pollBatteryVoltage(void *arg)
 
 #ifdef THE_BOX
       rtc_gpio_hold_dis((gpio_num_t)SDS_POWER_PIN);
-      stopScd41();
 #endif
 
       ESP_LOGE(TAG_SENSORS_POLL, "Battery voltage too low: %f, going to sleep", mean);
@@ -657,7 +699,9 @@ void pollMainSensors(void *arg)
   pollSht41();
   pollBmp280();
   pollTSL2591();
-  pollScd41();
+
+  if (measureCountModPm != 0 && !sdsRunning)
+    pollScd41();
   pollPir();
 
 #else
