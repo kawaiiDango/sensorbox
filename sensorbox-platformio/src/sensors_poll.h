@@ -47,6 +47,8 @@ RTC_DATA_ATTR int64_t vocStartTime = 0;
 
 Readings readings;
 RTC_DATA_ATTR uint8_t measureCountModPm = 0;
+RTC_DATA_ATTR uint8_t measureCountModSubmit = 0;
+RTC_DATA_ATTR uint8_t measureCountModNtp = 0;
 RTC_DATA_ATTR float lastBatteryVoltage = -1;
 
 uint32_t pollingCtr = 0;
@@ -435,6 +437,32 @@ void initScd41()
   uint16_t co2 = 0;
   float temperature = 0.0f;
   float humidity = 0.0f;
+
+  float measurementIntervalSeconds = prefs.collectIntvlMs / 1000.0;
+
+  /*
+  The initial period represents the number of readings after powering up the sensor for the very first time to trigger the
+first automatic self-calibration. The standard period represents the number of subsequent readings periodically
+triggering ASC after completion of the initial period. Sensirion recommends adjusting the number of samples
+comprising initial and standard period to 2 and 7 days at the average intended sampling rate, respectively.
+The number of single shots for initial and standard period can be adjusted onboard the sensor using the commands
+detailed in Table 4 below. Note that the parameter value represents twelve times the number of single shots defining
+the length of either period. Furthermore, this parameter must be an integer and a multiple of four.
+
+Example: Average sampling rate: 3 minutes
+Standard period: 7 days = 3360 single shots → Standard period parameter value = 280
+Initial period: 2 days = 960 single shots → Initial period parameter value = 80
+
+Example: Average sampling rate: 2 minutes
+Standard period: 7 days = 5040 single shots → Standard period parameter value = 420
+Initial period: 2 days = 1440 single shots → Initial period parameter value = 120
+  */
+
+  uint16_t ascInitialPeriod = ceil(2.0 * 24 * 60 * 60 / measurementIntervalSeconds / 12 / 4) * 4;
+  uint16_t ascStandardPeriod = ceil(7.0 * 24 * 60 * 60 / measurementIntervalSeconds / 12 / 4) * 4;
+
+  ESP_LOGW(TAG_SENSORS_POLL, "ASC initial period: %u, standard period: %u", ascInitialPeriod, ascStandardPeriod);
+
   Wire.begin();
   scd41.begin(Wire);
   uint16_t error = scd41.stopPeriodicMeasurement();
@@ -444,7 +472,21 @@ void initScd41()
     return;
   }
 
-  error = scd41.setAmbientPressure(lastPressure);
+  error = scd41.setAutomaticSelfCalibration(true);
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  error = scd41.setAutomaticSelfCalibrationInitialPeriod(ascInitialPeriod);
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  error = scd41.setAutomaticSelfCalibrationStandardPeriod(ascStandardPeriod);
   if (error)
   {
     scd41PrintError(error);
@@ -700,7 +742,7 @@ void pollMainSensors(void *arg)
   pollBmp280();
   pollTSL2591();
 
-  if (measureCountModPm != 0 && !sdsRunning)
+  if (measureCountModPm != 0 && measureCountModSubmit != 0 && !sdsRunning && isIdle())
     pollScd41();
   pollPir();
 

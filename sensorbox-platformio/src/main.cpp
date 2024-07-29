@@ -20,8 +20,8 @@ const char *TAG_MAIN = "main";
 
 // sleep stuff
 // RTC_DATA_ATTR uint8_t measureCountModPm = 0;
-RTC_DATA_ATTR uint8_t measureCountModSubmit = 0;
-RTC_DATA_ATTR uint8_t measureCountModNtp = 0;
+// RTC_DATA_ATTR uint8_t measureCountModSubmit = 0;
+// RTC_DATA_ATTR uint8_t measureCountModNtp = 0;
 const int collectingIntervalActive = 6000;
 uint64_t timeItTime = 0;
 RTC_DATA_ATTR uint16_t touchThreshold = 0;
@@ -285,11 +285,11 @@ void doOnTouchpadWakeup()
 void doOnEveryBoot()
 {
   btStop();
-  initFromPrefs();
-
   Serial.begin(DEBUG_BAUD_RATE);
 
-  ESP_LOGW(TAG_MAIN, "Wakeup: %s, mPm: %u, mSubmit: %u, timeTaken: %lu", get_wakeup_reason_str(), measureCountModPm, measureCountModSubmit, millis());
+  ESP_LOGW(TAG_MAIN, "Wakeup: %s, mPm: %u, mSubmit: %u, bootTime: %lu", get_wakeup_reason_str(), measureCountModPm, measureCountModSubmit, millis());
+
+  initFromPrefs();
 
   const esp_app_desc_t *appDesc = esp_app_get_description();
 
@@ -698,17 +698,18 @@ void setup()
     pollAllSensors();
     Serial.println("pollAllSensors");
 
-    if (isIdle() && !bitsetContains(wakeupReasonsBitset, WAKEUP_SUBMIT) && measureCountModSubmit == 0)
-      bitsetAdd(nextWakeupReasonsBitset, WAKEUP_SUBMIT);
-
     bitsetAdd(nextWakeupReasonsBitset, WAKEUP_MEASURE);
 
-    if (prefs.collectIntvlMs > 60000)
-      priorityQueueWrite(wakeupTasksQ, WakeupTask{WAKEUP_MEASURE_CO2_ONLY, rtcMillis() + prefs.collectIntvlMs / 2});
+    // if (prefs.collectIntvlMs > 60000)
+    //   priorityQueueWrite(wakeupTasksQ, WakeupTask{WAKEUP_MEASURE_CO2_ONLY, rtcMillis() + prefs.collectIntvlMs / 2});
 
     measureCountModPm = (measureCountModPm + 1) % prefs.pmSensorEvery;
     measureCountModSubmit = (measureCountModSubmit + 1) % (prefs.reportIntvlMs / prefs.collectIntvlMs);
     measureCountModNtp = (measureCountModNtp + 1) % (NTP_SYNC_INTERVAL_S * 1000 / prefs.collectIntvlMs);
+
+    // do this after incrementing
+    if (isIdle() && !bitsetContains(wakeupReasonsBitset, WAKEUP_SUBMIT) && measureCountModSubmit == 0)
+      bitsetAdd(nextWakeupReasonsBitset, WAKEUP_SUBMIT);
   }
 
   if (!isIdle())
@@ -718,14 +719,6 @@ void setup()
 #endif
     attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonPressedToStartAp, FALLING);
     doWhileAwakeLoop();
-  }
-
-  // do the rest
-  if (bitsetContains(wakeupReasonsBitset, WAKEUP_SUBMIT))
-  {
-    connectToWiFiIfNeeded();
-    WiFi.waitForConnectResult(strlen(prefs.wifiPassword) > 0 ? wifiSecureConnectTimeoutMs
-                                                             : wifiConnectTimeoutMs);
   }
 
 // out of band wakeup
@@ -744,6 +737,14 @@ void setup()
 
   if (bitsetContains(wakeupReasonsBitset, WAKEUP_AP_MODE))
     runApMode();
+
+  // do the rest
+  if (bitsetContains(wakeupReasonsBitset, WAKEUP_SUBMIT))
+  {
+    connectToWiFiIfNeeded();
+    WiFi.waitForConnectResult(strlen(prefs.wifiPassword) > 0 ? wifiSecureConnectTimeoutMs
+                                                             : wifiConnectTimeoutMs);
+  }
 
   if (nextWakeupReasonsBitset != 0)
   {
