@@ -2,6 +2,9 @@
 
 I took a bunch of sensors and shoved them into a box.
 
+### Wow, look at the mess I made.
+<img width="640" alt="pic of the box" src="https://i.imgur.com/rRy1muF.jpeg" />
+
 ## Hardware used
 
 - Firebeetle 2 ESP32 board
