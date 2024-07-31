@@ -1,10 +1,8 @@
-# Name,   Type, SubType, Offset,   Size, Flags
-# Note: if you have increased the bootloader size, make sure to update the offsets to avoid overlap
-nvs,      data, nvs,     ,        0x4000,
-otadata,  data, ota,     ,        0x2000,
-phy_init, data, phy,     ,        0x1000,
+# from https://github.com/Jason2866/platform-espressif32/blob/Arduino/IDF5/examples/espidf-arduino-littlefs/partitions_custom.csv?plain=1
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,     0x9000,  0x5000,
+otadata,  data, ota,     0xe000,  0x2000,
 # 1.5MB
-factory,  app,  factory, ,        0x180000,
-# ota_0,    app,  ota_0,   ,        1M,
-# ota_1,    app,  ota_1,   ,        1M,
-spiffs,   data, spiffs,  ,        0x260000,
+app0,     app,  ota_0,   0x10000, 0x180000,
+# app1,     app,  ota_1,   0x90000, 0x110000,
+spiffs,   data, spiffs,  0x190000,0x260000,

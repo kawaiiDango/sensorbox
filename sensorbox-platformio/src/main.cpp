@@ -255,14 +255,9 @@ void doOnFreshBoot()
   printToLcdAndSerial(version_str);
   String tmp2 = "lastReset: " + String(prefs.lastResetReason);
   printToLcdAndSerial(tmp2);
-  printToLcdAndSerial("setup wifi");
+  printToLcdAndSerial("init scd41");
 
 #endif
-
-  // wifi setup
-
-  Serial.println("connecting");
-  connectToWiFiIfNeeded();
 
   stayAwakeUntilTime = millis() + forceWakeupTimeout;
 }
@@ -345,7 +340,10 @@ void doWhileAwakeLoop()
     printSensorDataToLcd();
 
   if (bitsetContains(wakeupReasonsBitset, WAKEUP_FIRST_BOOT))
+  {
     initScd41(); // init after reading pressure
+    connectToWiFiIfNeeded();
+  }
 #endif
 
   while (!isIdle())
@@ -619,7 +617,7 @@ void pollAllSensors()
 
 #ifdef THE_BOX
   // start and schedule sds after all other sensors have been polled to avoid voltage ripple while reading
-  if (measureCountModPm == 0)
+  if (measureCountModPm == 0 && !sdsRunning)
   {
     startSds();
     priorityQueueWrite(wakeupTasksQ, WakeupTask{WAKEUP_MEASURE_PM, rtcMillis() + PM_SENSOR_RUNTIME_SECS * 1000});
@@ -723,7 +721,7 @@ void setup()
 
 // out of band wakeup
 #ifdef THE_BOX
-  if (bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_PM))
+  if (bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_PM) && sdsRunning)
   {
     pollSds();
   }

@@ -507,12 +507,6 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
 // to be run after reading pressure
 void pollScd41()
 {
-  // don't take readings at arbritary times if not idle
-  if (!isIdle())
-  {
-    return;
-  }
-
   SensirionI2CScd4x scd41;
   uint16_t error;
   uint16_t co2 = 0;
@@ -574,19 +568,20 @@ void startSds()
 
   delay(100);
   Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
-  SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
-
-  auto rms = sds.setQueryReportingMode();
-
-  if (!rms.isOk())
-    ESP_LOGE(TAG_SENSORS_POLL, "Could not setQueryReportingMode: %s", rms.statusToString().c_str());
+  // SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
+  SdsDustSensor sds(Serial2);
 
   auto wps = sds.setCustomWorkingPeriod(10);
 
   if (!wps.isOk())
     ESP_LOGE(TAG_SENSORS_POLL, "Could not setCustomWorkingPeriod: %s", wps.statusToString().c_str());
 
-  Serial.println("startSds");
+  auto rms = sds.setQueryReportingMode();
+
+  if (!rms.isOk())
+    ESP_LOGE(TAG_SENSORS_POLL, "Could not setQueryReportingMode: %s", rms.statusToString().c_str());
+
+  Serial.println("sds started");
 }
 
 void pollSds()

@@ -440,7 +440,7 @@ void coap_io_loop(void *arg)
 
             if (mid == COAP_INVALID_MID)
             {
-                ESP_LOGE(TAG_REPORTER, "coap_send failed, free heap: %u", ESP.getFreeHeap());
+                ESP_LOGE(TAG_REPORTER, "coap_send failed");
                 goto finish;
             }
             else if (meta.readings != NULL)
