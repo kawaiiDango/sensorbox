@@ -8,11 +8,11 @@
 #ifdef THE_BOX
 
 #define PIR_PIN 36
-#define TOUCH_PIN 0
+#define TOUCH_PIN 4
 #define SDS_POWER_PIN 25
-#define SDS_TX_PIN 16
+#define SDS_TX_PIN 39
 #define SDS_RX_PIN 17
-#define LCD_RST_PIN 26
+#define LCD_RST_PIN 16
 #define LCD_CS_PIN 12
 #define LCD_DC_PIN 15
 #define LCD_DIN_PIN 23
@@ -28,7 +28,7 @@
 #define I2S_SCK_PIN 14
 #define I2S_SD_PIN 35
 // The mic is powered from a gpio pin to allow it to be turned off when not in use
-#define MIC_POWER_PIN 4
+#define MIC_POWER_PIN 26
 #else
 // #define VOC_PREHEAT_TIMEOUT (3 * 60 * 1000)
 #define TOUCH_PIN 15

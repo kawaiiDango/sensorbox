@@ -772,8 +772,8 @@ void setup()
   int64_t diff = static_cast<int64_t>(wt->timestamp) - static_cast<int64_t>(rtcMillis());
   uint64_t willWakeInMs = max(500LL, diff);
 
-  if (!bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_CO2_ONLY) || sdsRunning)
-    lastAwakeDuration = millis();
+  // if (!bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_CO2_ONLY) || sdsRunning)
+  lastAwakeDuration = millis();
 
   wakeupReasonsBitset = wt->wakeupReasonsBitset;
 
