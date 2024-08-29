@@ -341,7 +341,6 @@ void doWhileAwakeLoop()
 
   if (bitsetContains(wakeupReasonsBitset, WAKEUP_FIRST_BOOT))
   {
-    initScd41(); // init after reading pressure
     connectToWiFiIfNeeded();
   }
 #endif
@@ -413,7 +412,7 @@ void gotIpTask(void *args)
 
     configTime(0, 0, prefs.ntpServer);
     bool gotNetworkTime = false;
-    int maxTries = !isIdle() ? 5 : 1;
+    int maxTries = !isIdle() ? 3 : 1;
 
     for (int tries = 0; tries < maxTries && !gotNetworkTime; tries++)
     {

@@ -29,6 +29,8 @@
 #define I2S_SD_PIN 35
 // The mic is powered from a gpio pin to allow it to be turned off when not in use
 #define MIC_POWER_PIN 26
+// write to its eeprom if the required settings are different from the stored ones
+#define SCD41_WRITE_EEPROM_ENABLED false
 #else
 // #define VOC_PREHEAT_TIMEOUT (3 * 60 * 1000)
 #define TOUCH_PIN 15

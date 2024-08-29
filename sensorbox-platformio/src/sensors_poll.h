@@ -40,6 +40,7 @@ RTC_DATA_ATTR short lastCo2 = -1;
 RTC_DATA_ATTR short lastPressure = -1;
 RTC_DATA_ATTR bool oobValuesUsed = false;
 RTC_DATA_ATTR bool sdsRunning = false;
+RTC_DATA_ATTR bool scd41Inited = false;
 
 #else
 RTC_DATA_ATTR int64_t vocStartTime = 0;
@@ -317,104 +318,6 @@ void scd41PrintError(uint16_t error)
   ESP_LOGE(TAG_SENSORS_POLL, "scd41 error: %s", errorMessage);
 }
 
-// unused for now, manually run when required
-void printScd41Settings()
-{
-  SensirionI2CScd4x scd41;
-  Wire.begin();
-  scd41.begin(Wire);
-  uint16_t data = 0;
-  uint16_t error = 0;
-
-  error = scd41.stopPeriodicMeasurement();
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
-
-  ESP_LOGW(TAG_SENSORS_POLL, "Stopped periodic measurement");
-
-  error = scd41.getAutomaticSelfCalibration(data);
-
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
-
-  ESP_LOGW(TAG_SENSORS_POLL, "Automatic self calibration: %d", data);
-
-  error = scd41.getAutomaticSelfCalibrationInitialPeriod(data); // is 44
-
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
-
-  ESP_LOGW(TAG_SENSORS_POLL, "Automatic self calibration initial period: %d", data);
-
-  error = scd41.getAutomaticSelfCalibrationStandardPeriod(data); // is 156
-
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
-
-  ESP_LOGW(TAG_SENSORS_POLL, "Automatic self calibration standard period: %d", data);
-}
-
-// unused for now, manually run when required
-void changeScd41Settings()
-{
-  SensirionI2CScd4x scd41;
-  Wire.begin();
-  scd41.begin(Wire);
-  uint16_t ascEnabled = 0;
-  uint16_t error = 0;
-
-  error = scd41.stopPeriodicMeasurement();
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
-
-  error = scd41.getAutomaticSelfCalibration(ascEnabled);
-
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
-
-  if (ascEnabled)
-  {
-    error = scd41.setAutomaticSelfCalibration(false);
-    if (error)
-    {
-      scd41PrintError(error);
-      return;
-    }
-    error = scd41.setTemperatureOffset(0);
-    if (error)
-    {
-      scd41PrintError(error);
-      return;
-    }
-
-    error = scd41.persistSettings();
-    if (error)
-    {
-      scd41PrintError(error);
-      return;
-    }
-  }
-
-  ESP_LOGW(TAG_SENSORS_POLL, "scd41 settings modified and persisted");
-}
 uint16_t SensirionI2CScd4x_measureSingleShot()
 {
   uint16_t error;
@@ -461,7 +364,10 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
   uint16_t ascInitialPeriod = ceil(2.0 * 24 * 60 * 60 / measurementIntervalSeconds / 12 / 4) * 4;
   uint16_t ascStandardPeriod = ceil(7.0 * 24 * 60 * 60 / measurementIntervalSeconds / 12 / 4) * 4;
 
-  ESP_LOGW(TAG_SENSORS_POLL, "ASC initial period: %u, standard period: %u", ascInitialPeriod, ascStandardPeriod);
+  uint16_t storedAscInitialPeriod = 0;
+  uint16_t storedAscStandardPeriod = 0;
+  uint16_t storedAsc = false;
+  float storedTemperatureOffset = 0;
 
   Wire.begin();
   scd41.begin(Wire);
@@ -472,26 +378,89 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
     return;
   }
 
-  error = scd41.setAutomaticSelfCalibration(true);
+  // get the params stored in eeprom
+
+  error = scd41.getAutomaticSelfCalibration(storedAsc);
+
   if (error)
   {
     scd41PrintError(error);
     return;
   }
 
-  error = scd41.setAutomaticSelfCalibrationInitialPeriod(ascInitialPeriod);
+  error = scd41.getAutomaticSelfCalibrationInitialPeriod(storedAscInitialPeriod); // is 44 in factory settings
+
   if (error)
   {
     scd41PrintError(error);
     return;
   }
 
-  error = scd41.setAutomaticSelfCalibrationStandardPeriod(ascStandardPeriod);
+  error = scd41.getAutomaticSelfCalibrationStandardPeriod(storedAscStandardPeriod); // is 156 in factory settings
+
   if (error)
   {
     scd41PrintError(error);
     return;
   }
+
+  error = scd41.getTemperatureOffset(storedTemperatureOffset); // is 4 in factory settings
+
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  // write the new params if they are different
+
+  if (storedAscInitialPeriod == 0 || storedAscInitialPeriod != ascInitialPeriod ||
+      storedAscStandardPeriod == 0 || storedAscStandardPeriod != ascStandardPeriod ||
+      storedAsc == false || storedTemperatureOffset != 0)
+  {
+    ESP_LOGW(TAG_SENSORS_POLL, "ASC initial period: %u, standard period: %u, stored: %u, %u", ascInitialPeriod, ascStandardPeriod, storedAscInitialPeriod, storedAscStandardPeriod);
+    error = scd41.setAutomaticSelfCalibration(true);
+    if (error)
+    {
+      scd41PrintError(error);
+      return;
+    }
+
+    error = scd41.setAutomaticSelfCalibrationInitialPeriod(ascInitialPeriod);
+    if (error)
+    {
+      scd41PrintError(error);
+      return;
+    }
+
+    error = scd41.setAutomaticSelfCalibrationStandardPeriod(ascStandardPeriod);
+    if (error)
+    {
+      scd41PrintError(error);
+      return;
+    }
+
+    error = scd41.setTemperatureOffset(0);
+    if (error)
+    {
+      scd41PrintError(error);
+      return;
+    }
+
+    if (SCD41_WRITE_EEPROM_ENABLED)
+    {
+      error = scd41.persistSettings();
+      if (error)
+      {
+        scd41PrintError(error);
+        return;
+      }
+
+      ESP_LOGW(TAG_SENSORS_POLL, "SCD41 settings persisted");
+    }
+  }
+
+  // throw away the first reading
 
   error = scd41.measureSingleShot();
   if (error)
@@ -500,8 +469,11 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
     return;
   }
 
-  // discard first reading
   scd41.readMeasurement(co2, temperature, humidity);
+
+  scd41Inited = true;
+
+  ESP_LOGW(TAG_SENSORS_POLL, "SCD41 inited");
 }
 
 // to be run after reading pressure
@@ -515,6 +487,10 @@ void pollScd41()
 
   scd41.begin(Wire);
 
+  if (!scd41Inited)
+  {
+    initScd41();
+  }
   // read prev measurement
   error = scd41.readMeasurement(co2, temperature, humidity);
   if (error)
