@@ -338,12 +338,12 @@ void doWhileAwakeLoop()
 #ifdef THE_BOX
   if (!isIdle())
     printSensorDataToLcd();
+#endif
 
   if (bitsetContains(wakeupReasonsBitset, WAKEUP_FIRST_BOOT))
   {
     connectToWiFiIfNeeded();
   }
-#endif
 
   while (!isIdle())
   {
@@ -592,7 +592,6 @@ void pollAllSensors()
   readings = invalidReadings;
   pollingCtr = 0;
 
-  createPollingTask(pollBatteryVoltage, "pollBatteryVoltage");
   createPollingTask(pollMainSensors, "pollMainSensors");
 
 #ifdef THE_BOX

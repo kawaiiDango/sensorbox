@@ -1,45 +1,76 @@
 dependencies:
   espressif/cbor:
     component_hash: 440f4ee4504841cc9b4f3a8ef755776a612ac9dace355514c68b999868f990ff
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.3'
     source:
-      service_url: https://api.components.espressif.com/
+      registry_url: https://components.espressif.com/
       type: service
     version: 0.6.0~1
   espressif/coap:
-    component_hash: b76d3b92424c55629509e60066d0d87cdd10f8f6272f1314f81ffd443de601b6
+    component_hash: 041beed0026e0b9f461ffea422bcb579b41fc58df1c1286648b749aceaed2e9b
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
     source:
-      service_url: https://api.components.espressif.com/
+      registry_url: https://components.espressif.com/
       type: service
-    version: 4.3.4~3
+    version: 4.3.5~2
   espressif/esp-dsp:
     component_hash: fa7fe74305df6da25867437ebcd4213e047cbfc0556cf92067ab657fce537c6e
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.2'
     source:
-      service_url: https://api.components.espressif.com/
+      registry_url: https://components.espressif.com/
       type: service
     version: 1.5.2
   espressif/esp_modem:
     component_hash: e48da33fee082dd9d9a97a354a228057e07a14ac108766b40ad84e018205410a
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
     source:
-      service_url: https://api.components.espressif.com/
+      registry_url: https://components.espressif.com/
       type: service
     version: 1.1.0
   espressif/mdns:
     component_hash: af6306fe65d637a3683d1cf671508fcedd6b05f9ca029a8815abeab64001fb8d
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
     source:
-      service_url: https://api.components.espressif.com/
+      registry_url: https://components.espressif.com/
       type: service
     version: 1.4.0
   idf:
-    component_hash: null
     source:
       type: idf
-    version: 5.1.4
+    version: 5.1.5
   joltwallet/littlefs:
     component_hash: 362f1f5beb5087b0c60169aff82676d2d0ffc991ead975212b0cba95959181c5
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.3'
     source:
-      service_url: https://api.components.espressif.com/
+      registry_url: https://components.espressif.com/
       type: service
     version: 1.14.8
-manifest_hash: b8ee80ebf2ccd59501337e22ec5d77652b1242fa1ad151f19dd407ca0c2db9ec
+direct_dependencies:
+- espressif/cbor
+- espressif/coap
+- espressif/esp-dsp
+- espressif/esp_modem
+- espressif/mdns
+- idf
+- joltwallet/littlefs
+manifest_hash: 01264af43a3f2f20a2f8d26637eded2b88a77411506ae67d68d70117fa4aa96f
 target: esp32
-version: 1.0.0
+version: 2.0.0

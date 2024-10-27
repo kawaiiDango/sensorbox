@@ -51,6 +51,7 @@ RTC_DATA_ATTR uint8_t measureCountModPm = 0;
 RTC_DATA_ATTR uint8_t measureCountModSubmit = 0;
 RTC_DATA_ATTR uint8_t measureCountModNtp = 0;
 RTC_DATA_ATTR float lastBatteryVoltage = -1;
+bool isBatterySpike = false;
 
 uint32_t pollingCtr = 0;
 EventGroupHandle_t pollingEventGroup = xEventGroupCreate();
@@ -636,7 +637,7 @@ void pollDht20()
 
 #endif
 
-void pollBatteryVoltage(void *arg)
+void pollBatteryVoltage()
 {
   float sum = 0;
   int rounds = 10;
@@ -679,10 +680,10 @@ void pollBatteryVoltage(void *arg)
   mean = mapf(mean, 3.88, 4.15, 3.84, 4.10); // for the lolin clone
 #endif
 
-  bool isSpike = lastBatteryVoltage > 0 && fabs(lastBatteryVoltage - mean) > threshold;
+  isBatterySpike = lastBatteryVoltage > 0 && fabs(lastBatteryVoltage - mean) > threshold;
 
   // prevent spikes from shutting down the device
-  if (!isSpike)
+  if (!isBatterySpike)
   {
 #ifdef ENABLE_LOW_BATTERY_SHUTDOWN
     if (mean > 0.6 && mean < 3.5)
@@ -701,21 +702,21 @@ void pollBatteryVoltage(void *arg)
 
   readings.voltageAvg = mean;
   lastBatteryVoltage = mean;
-
-  COMPLETE_TASK
 }
 
 void pollMainSensors(void *arg)
 {
+  pollBatteryVoltage();
   Wire.begin();
 #ifdef THE_BOX
   pollSht41();
   pollBmp280();
   pollTSL2591();
-
-  if (measureCountModPm != 0 && measureCountModSubmit != 0 && !sdsRunning && isIdle())
-    pollScd41();
   pollPir();
+
+  if (measureCountModPm != 0 && measureCountModSubmit != 0 &&
+      !sdsRunning && isIdle() && !isBatterySpike)
+    pollScd41();
 
 #else
   pollDht20();

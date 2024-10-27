@@ -3,7 +3,7 @@ dependencies:
   idf: ">=5.1"
 
   cbor: "^0.6.0"
-  coap: "^4.3.4"
+  coap: "^4.3.5"
   esp-dsp: "^1.5.2"
 
   # nghttp: "^1.50.0"
