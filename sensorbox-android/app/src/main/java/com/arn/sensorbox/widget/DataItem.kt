@@ -56,6 +56,12 @@ data class DataItem(
                 dataItems.add(DataItem(co2, "ppm", "💨"))
             }
 
+            if (pm25 != 0f && pm10 != 0f) {
+                val aqi = ReadingsUtils.usAqi(pm25, pm10)
+                val colorEmoji = ReadingsUtils.usAqiColorEmoji(aqi)
+                dataItems.add(DataItem(aqi, "USaqi", colorEmoji))
+            }
+
             if (voltageAvg != 0f) {
                 dataItems.add(DataItem(voltageAvg, "V", "🔋"))
             }

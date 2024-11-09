@@ -15,6 +15,7 @@ data class SensorBoxData(
     val pm25: Float = 0f,
     val pm10: Float = 0f,
     val co2: Float = 0f,
+    val usAqi: Float = 0f,
     val voltageAvg: Float = 0f,
     val timestamp: Long = 0L,
 )
