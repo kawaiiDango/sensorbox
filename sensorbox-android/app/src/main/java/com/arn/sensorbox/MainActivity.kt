@@ -71,7 +71,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun AppContent() {
     Column(
-        modifier = Modifier.wrapContentSize(),
+        modifier = Modifier.wrapContentSize().padding(16.dp),
     ) {
         val subscribedTopics = App.prefs.data.map { it.subscribedTopics }
             .collectAsState(emptySet())
@@ -80,7 +80,6 @@ private fun AppContent() {
 
         Text(
             text = stringResource(R.string.subscribe_to_topics),
-            modifier = Modifier.padding(8.dp)
         )
 
         arrayOf("widget", "digests", "alerts").forEach { topic ->

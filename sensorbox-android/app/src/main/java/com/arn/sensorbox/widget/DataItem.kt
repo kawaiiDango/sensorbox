@@ -57,9 +57,12 @@ data class DataItem(
             }
 
             if (pm25 != 0f && pm10 != 0f) {
-                val aqi = ReadingsUtils.usAqi(pm25, pm10)
-                val colorEmoji = ReadingsUtils.usAqiColorEmoji(aqi)
-                dataItems.add(DataItem(aqi, "USaqi", colorEmoji))
+                val usAqi = ReadingsUtils.usAqi(pm25, pm10)
+                val inAqi = ReadingsUtils.inAqi(pm25, pm10)
+                val usColorEmoji = ReadingsUtils.usAqiColorEmoji(usAqi)
+                val inColorEmoji = ReadingsUtils.inAqiColorEmoji(inAqi)
+                dataItems.add(DataItem(inAqi, "INaqi", inColorEmoji))
+                dataItems.add(DataItem(usAqi, "USaqi", usColorEmoji))
             }
 
             if (voltageAvg != 0f) {
