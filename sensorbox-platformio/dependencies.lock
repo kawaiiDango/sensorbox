@@ -3,6 +3,7 @@ dependencies:
     component_hash: 440f4ee4504841cc9b4f3a8ef755776a612ac9dace355514c68b999868f990ff
     dependencies:
     - name: idf
+      registry_url: https://components.espressif.com
       require: private
       version: '>=4.3'
     source:
@@ -13,6 +14,7 @@ dependencies:
     component_hash: 041beed0026e0b9f461ffea422bcb579b41fc58df1c1286648b749aceaed2e9b
     dependencies:
     - name: idf
+      registry_url: https://components.espressif.com
       require: private
       version: '>=4.4'
     source:
@@ -23,16 +25,26 @@ dependencies:
     component_hash: fa7fe74305df6da25867437ebcd4213e047cbfc0556cf92067ab657fce537c6e
     dependencies:
     - name: idf
+      registry_url: https://components.espressif.com
       require: private
       version: '>=4.2'
     source:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.5.2
+  espressif/esp32-camera:
+    component_hash: 8397b60b5d508bcffe995ffd0efab117ff51b670ae37397b0eac175592782a0c
+    dependencies: []
+    source:
+      git: https://github.com/espressif/esp32-camera.git
+      path: .
+      type: git
+    version: 4335c93ec462a379aa2a3d655b8834972d725190
   espressif/esp_modem:
     component_hash: e48da33fee082dd9d9a97a354a228057e07a14ac108766b40ad84e018205410a
     dependencies:
     - name: idf
+      registry_url: https://components.espressif.com
       require: private
       version: '>=4.1'
     source:
@@ -43,6 +55,7 @@ dependencies:
     component_hash: af6306fe65d637a3683d1cf671508fcedd6b05f9ca029a8815abeab64001fb8d
     dependencies:
     - name: idf
+      registry_url: https://components.espressif.com
       require: private
       version: '>=5.0'
     source:
@@ -52,11 +65,12 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.1.5
+    version: 5.3.2
   joltwallet/littlefs:
     component_hash: 362f1f5beb5087b0c60169aff82676d2d0ffc991ead975212b0cba95959181c5
     dependencies:
     - name: idf
+      registry_url: https://components.espressif.com
       require: private
       version: '>=4.3'
     source:
@@ -67,10 +81,11 @@ direct_dependencies:
 - espressif/cbor
 - espressif/coap
 - espressif/esp-dsp
+- espressif/esp32-camera
 - espressif/esp_modem
 - espressif/mdns
 - idf
 - joltwallet/littlefs
-manifest_hash: 01264af43a3f2f20a2f8d26637eded2b88a77411506ae67d68d70117fa4aa96f
+manifest_hash: 53279bfe327e1dc9dede90274fd4e19568bdf0cb8367594ef289e286145c5fc4
 target: esp32
 version: 2.0.0

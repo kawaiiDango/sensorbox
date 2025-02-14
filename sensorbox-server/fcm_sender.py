@@ -1,4 +1,3 @@
-import json
 import logging
 import datetime
 import queue
@@ -52,5 +51,9 @@ def fcm_send():
                     priority="normal",
                 ),
             )
-        result = messaging.send(message)
-        logging.info(result)
+
+        try:
+            result = messaging.send(message)
+            logging.info(result)
+        except Exception as e:
+            logging.error(e)

@@ -337,7 +337,7 @@ uint16_t SensirionI2CScd4x_measureSingleShot()
 
 void initScd41()
 {
-  SensirionI2CScd4x scd41;
+  SensirionI2cScd4x scd41;
   uint16_t co2 = 0;
   float temperature = 0.0f;
   float humidity = 0.0f;
@@ -367,11 +367,11 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
 
   uint16_t storedAscInitialPeriod = 0;
   uint16_t storedAscStandardPeriod = 0;
-  uint16_t storedAsc = false;
+  uint16_t storedAscEnabled = false;
   float storedTemperatureOffset = 0;
 
   Wire.begin();
-  scd41.begin(Wire);
+  scd41.begin(Wire, SCD41_I2C_ADDR_62);
   uint16_t error = scd41.stopPeriodicMeasurement();
   if (error)
   {
@@ -381,7 +381,7 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
 
   // get the params stored in eeprom
 
-  error = scd41.getAutomaticSelfCalibration(storedAsc);
+  error = scd41.getAutomaticSelfCalibrationEnabled(storedAscEnabled);
 
   if (error)
   {
@@ -417,10 +417,10 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
 
   if (storedAscInitialPeriod == 0 || storedAscInitialPeriod != ascInitialPeriod ||
       storedAscStandardPeriod == 0 || storedAscStandardPeriod != ascStandardPeriod ||
-      storedAsc == false || storedTemperatureOffset != 0)
+      storedAscEnabled == false || storedTemperatureOffset != 0)
   {
     ESP_LOGW(TAG_SENSORS_POLL, "ASC initial period: %u, standard period: %u, stored: %u, %u", ascInitialPeriod, ascStandardPeriod, storedAscInitialPeriod, storedAscStandardPeriod);
-    error = scd41.setAutomaticSelfCalibration(true);
+    error = scd41.setAutomaticSelfCalibrationEnabled(true);
     if (error)
     {
       scd41PrintError(error);
@@ -480,13 +480,13 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
 // to be run after reading pressure
 void pollScd41()
 {
-  SensirionI2CScd4x scd41;
+  SensirionI2cScd4x scd41;
   uint16_t error;
   uint16_t co2 = 0;
   float temperature = 0.0f;
   float humidity = 0.0f;
 
-  scd41.begin(Wire);
+  scd41.begin(Wire, SCD41_I2C_ADDR_62);
 
   if (!scd41Inited)
   {
@@ -500,7 +500,7 @@ void pollScd41()
   }
   else if (co2 == 0)
   {
-    ESP_LOGW(TAG_SENSORS_POLL, "Invalid sample detected, skipping.");
+    ESP_LOGE(TAG_SENSORS_POLL, "Invalid sample detected, skipping.");
   }
   else
   {
@@ -514,7 +514,8 @@ void pollScd41()
 
   if (lastPressure > 0)
   {
-    error = scd41.setAmbientPressure(lastPressure);
+    // convert hPa to Pa
+    error = scd41.setAmbientPressure(100 * lastPressure);
 
     if (error)
     {
