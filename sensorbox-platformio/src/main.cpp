@@ -299,6 +299,7 @@ void doOnEveryBoot()
     esp_deep_sleep_start();
   }
 
+#ifdef SUPPORTS_TOUCH
   xTaskCreate(
       calibrateTouchTask,
       "calibrateTouchTask",
@@ -306,6 +307,7 @@ void doOnEveryBoot()
       NULL,
       1,
       NULL);
+#endif
 
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
   if (wakeup_reason == ESP_SLEEP_WAKEUP_TOUCHPAD)
@@ -365,7 +367,9 @@ void doWhileAwakeLoop()
     if (!touchInterruptProcessed)
     {
       touchInterruptProcessed = true;
+#ifdef SUPPORTS_TOUCH
       touchAttachInterrupt(TOUCH_PIN, touchCallback, touchThreshold);
+#endif
 #ifdef THE_BOX
       printSensorDataToLcd();
 #endif
@@ -635,6 +639,7 @@ void pollAllSensors()
   enqueueReadings(readingsCopy);
 }
 
+#ifdef SUPPORTS_TOUCH
 void calibrateTouchTask(void *arg)
 {
   uint8_t count;
@@ -676,6 +681,7 @@ void calibrateTouchTask(void *arg)
     delay(10 * 1000);
   }
 }
+#endif
 
 void setup()
 {
@@ -782,8 +788,12 @@ void setup()
   Serial.print(" with ");
   Serial.println(wakeupReasonsBitset, BIN);
   Serial.flush();
+
+#ifdef SUPPORTS_TOUCH
   touchAttachInterrupt(TOUCH_PIN, touchCallback, touchThreshold);
   esp_sleep_enable_touchpad_wakeup();
+#endif
+
   esp_sleep_enable_timer_wakeup(willWakeInMs * 1000);
   // mark as consumed
   wt->timestamp = 0;

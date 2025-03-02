@@ -1,7 +1,8 @@
 #pragma once
 
-#define THE_BOX
-#define ENABLE_LOW_BATTERY_SHUTDOWN
+#define SUPPORTS_TOUCH
+// #define THE_BOX
+// #define ENABLE_LOW_BATTERY_SHUTDOWN
 // #define PRINT_CBOR
 
 

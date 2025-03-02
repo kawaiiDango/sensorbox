@@ -13,7 +13,7 @@
 #include <SensirionI2cSht4x.h>
 #include <SensirionI2CScd4x.h>
 #include "audio_read.h"
-#define PM_SENSOR_RUNTIME_SECS (31)
+#define PM_SENSOR_RUNTIME_SECS (32)
 
 #else
 
@@ -234,7 +234,6 @@ void enableBacklight(bool enabled)
 void startLcd()
 {
   lcd.begin();
-  lcd.setContrast(42);
   lcdStarted = true;
 }
 
@@ -544,20 +543,24 @@ void startSds()
 
   sdsRunning = true;
 
-  delay(100);
   Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
+  delay(1500);
   // SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
   SdsDustSensor sds(Serial2);
 
   auto wps = sds.setCustomWorkingPeriod(10);
 
   if (!wps.isOk())
+  {
     ESP_LOGE(TAG_SENSORS_POLL, "Could not setCustomWorkingPeriod: %s", wps.statusToString().c_str());
+  }
 
   auto rms = sds.setQueryReportingMode();
 
   if (!rms.isOk())
+  {
     ESP_LOGE(TAG_SENSORS_POLL, "Could not setQueryReportingMode: %s", rms.statusToString().c_str());
+  }
 
   Serial.println("sds started");
 }
@@ -589,6 +592,8 @@ void pollSds()
   oobLastPm25 = pm.pm25;
   oobLastPm10 = pm.pm10;
   oobValuesUsed = false;
+
+  ESP_LOGW(TAG_SENSORS_POLL, "PM2.5: %.2f, PM10: %.2f", pm.pm25, pm.pm10);
 }
 
 void pollAudio(void *arg)
@@ -628,11 +633,22 @@ void pollDht20()
 {
   DFRobot_DHT20 dht20;
 
+  // calibration constants for y = ax + b
+  // calibrated against the more accurate sht41 using excel
+  float at = 1.056740402;
+  float bt = -0.953464085;
+
+  float ah = 0.994045558;
+  float bh = 1.768696989;
+
   if (dht20.begin() == 0)
   {
     // 0 is successful
     readings.temperature = dht20.getTemperature();
     readings.humidity = dht20.getHumidity() * 100;
+
+    readings.temperature = at * readings.temperature + bt;
+    readings.humidity = ah * readings.humidity + bh;
   }
 }
 
