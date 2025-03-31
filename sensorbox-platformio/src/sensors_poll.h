@@ -13,7 +13,7 @@
 #include <SensirionI2cSht4x.h>
 #include <SensirionI2CScd4x.h>
 #include "audio_read.h"
-#define PM_SENSOR_RUNTIME_SECS (32)
+#define PM_SENSOR_RUNTIME_SECS (33)
 
 #else
 
@@ -49,7 +49,6 @@ RTC_DATA_ATTR int64_t vocStartTime = 0;
 Readings readings;
 RTC_DATA_ATTR uint8_t measureCountModPm = 0;
 RTC_DATA_ATTR uint8_t measureCountModSubmit = 0;
-RTC_DATA_ATTR uint8_t measureCountModNtp = 0;
 RTC_DATA_ATTR float lastBatteryVoltage = -1;
 bool isBatterySpike = false;
 

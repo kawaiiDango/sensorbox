@@ -1,6 +1,6 @@
 dependencies:
   # Required IDF version
-  idf: ">=5.1"
+  idf: ">=5.4"
 
   cbor: "^0.6.0"
   coap: "^4.3.5"

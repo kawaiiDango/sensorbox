@@ -3,16 +3,6 @@
 #######################################
 
 #
-# RTC Clock Config
-#
-# CONFIG_RTC_CLK_SRC_INT_RC is not set
-# CONFIG_RTC_CLK_SRC_EXT_CRYS is not set
-# CONFIG_RTC_CLK_SRC_EXT_OSC is not set
-CONFIG_RTC_CLK_SRC_INT_8MD256=y
-CONFIG_RTC_CLK_CAL_CYCLES=1024
-# end of RTC Clock Config
-
-#
 # Chip revision
 #
 # CONFIG_ESP32_REV_MIN_0 is not set

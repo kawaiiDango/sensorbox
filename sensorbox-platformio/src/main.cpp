@@ -405,45 +405,51 @@ void WiFiLostIP(WiFiEvent_t event, WiFiEventInfo_t info)
   ESP_LOGW(TAG_MAIN, "Lost IP");
 }
 
+void syncTime() {
+  struct tm timeinfo;
+  uint64_t oldTime = rtcMillis();
+  unsigned long timeTaken = millis();
+
+  configTime(0, 0, prefs.ntpServer);
+  bool gotNetworkTime = false;
+
+  delay(200);
+  gotNetworkTime = getLocalTime(&timeinfo);
+
+  timeTaken = millis() - timeTaken;
+
+  if (!gotNetworkTime)
+  {
+    ESP_LOGE(TAG_MAIN, "Failed to obtain time");
+  }
+  else
+  {
+    printRtcMillis(prefs.timezoneOffsetS);
+
+    // fix readings timestamps after the first NTP sync
+    if (oldTime / 1000 < APR_20_2023_S)
+    {
+      if (prefs.lastChangedS == 0)
+        savePrefs(); // save the time to preferences
+      fixReadingsTimestamps(&readingsBuffer, (oldTime + timeTaken) / 1000);
+    }
+
+    // fix wakeup tasks timestamps, they all should be in the future
+    fixPqTimestamps(wakeupTasksQ, oldTime + timeTaken);
+  }
+}
+
 void gotIpTask(void *args)
 {
-  // ntp
-  if (measureCountModNtp == 0 || rtcSecs() < APR_20_2023_S)
+  bool timeSyncDone = false;
+
+  if (rtcSecs() <= APR_20_2023_S)
   {
-    struct tm timeinfo;
-    uint64_t oldTime = rtcMillis();
-    unsigned long timeTaken = millis();
+    syncTime();
 
-    configTime(0, 0, prefs.ntpServer);
-    bool gotNetworkTime = false;
-    int maxTries = !isIdle() ? 3 : 1;
-
-    for (int tries = 0; tries < maxTries && !gotNetworkTime; tries++)
+    if (rtcSecs() > APR_20_2023_S)
     {
-      delay(500);
-      gotNetworkTime = getLocalTime(&timeinfo);
-    }
-
-    timeTaken = millis() - timeTaken;
-
-    if (!gotNetworkTime)
-    {
-      ESP_LOGE(TAG_MAIN, "Failed to obtain time");
-    }
-    else
-    {
-      printRtcMillis(prefs.timezoneOffsetS);
-
-      // fix readings timestamps after the first NTP sync
-      if (oldTime / 1000 < APR_20_2023_S)
-      {
-        if (prefs.lastChangedS == 0)
-          savePrefs(); // save the time to preferences
-        fixReadingsTimestamps(&readingsBuffer, (oldTime + timeTaken) / 1000);
-      }
-
-      // fix wakeup tasks timestamps, they all should be in the future
-      fixPqTimestamps(wakeupTasksQ, oldTime + timeTaken);
+      timeSyncDone = true;
     }
   }
 
@@ -464,6 +470,11 @@ void gotIpTask(void *args)
         NULL,
         1,
         NULL);
+
+    if (!timeSyncDone)
+    {
+      syncTime();
+    }
   }
 
   xSemaphoreGive(gotIpTaskSemaphore);
@@ -707,7 +718,6 @@ void setup()
 
     measureCountModPm = (measureCountModPm + 1) % prefs.pmSensorEvery;
     measureCountModSubmit = (measureCountModSubmit + 1) % (prefs.reportIntvlMs / prefs.collectIntvlMs);
-    measureCountModNtp = (measureCountModNtp + 1) % (NTP_SYNC_INTERVAL_S * 1000 / prefs.collectIntvlMs);
 
     // do this after incrementing
     if (isIdle() && !bitsetContains(wakeupReasonsBitset, WAKEUP_SUBMIT) && measureCountModSubmit == 0)
@@ -794,7 +804,7 @@ void setup()
   esp_sleep_enable_touchpad_wakeup();
 #endif
 
-  esp_sleep_enable_timer_wakeup(willWakeInMs * 1000);
+  esp_sleep_enable_timer_wakeup(willWakeInMs * 1000ULL);
   // mark as consumed
   wt->timestamp = 0;
 

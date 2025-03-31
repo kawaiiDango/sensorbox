@@ -42,4 +42,3 @@
 #endif
 
 #define DEBUG_BAUD_RATE 115200
-#define NTP_SYNC_INTERVAL_S 60 * 30 // 30 minutes
