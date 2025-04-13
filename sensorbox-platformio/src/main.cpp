@@ -11,10 +11,7 @@
 #include <sensors_poll.h>
 #include <apmode.h>
 #include <file_ring_buffer.h>
-
-#ifdef OTA_ENABLED
-#include <ArduinoOTA.h>
-#endif
+#include <ble.h>
 
 const char *TAG_MAIN = "main";
 
@@ -44,7 +41,6 @@ const uint8_t WAKEUP_FIRST_BOOT = 1 << 0;
 const uint8_t WAKEUP_MEASURE = 1 << 1;
 const uint8_t WAKEUP_SUBMIT = 1 << 2;
 const uint8_t WAKEUP_MEASURE_PM = 1 << 3;
-const uint8_t WAKEUP_MEASURE_CO2_ONLY = 1 << 4;
 const uint8_t WAKEUP_AP_MODE = 1 << 5;
 
 RTC_DATA_ATTR uint8_t wakeupReasonsBitset = WAKEUP_FIRST_BOOT | WAKEUP_MEASURE;
@@ -97,14 +93,14 @@ const char *get_wakeup_reason_str()
 
 void runApMode()
 {
-#ifdef THE_BOX
+#ifdef HAS_DISPLAY
   updateLcdStatus(true);
   enableBacklight(true);
   lcd.setTextColor(0xFFFF, 0x0000);
   printToLcdAndSerial("Setup Mode");
 #else
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  digitalWrite(LED_PIN, LED_ON_STATE);
 #endif
 
   bool success = frb_save_from_rtc(true);
@@ -119,7 +115,7 @@ void runApMode()
   memset(lastBssid, 0, sizeof(lastBssid));
 }
 
-#ifdef THE_BOX
+#ifdef HAS_DISPLAY
 
 void printToLcdAndSerial(const char *text, bool clear)
 {
@@ -202,7 +198,7 @@ void printSensorDataToLcd()
     lcd.setCursor(8, 3 * 8);
     lcd.printf("%.2f %s", readings.luminosity, units.light);
     lcd.setCursor(8, 4 * 8);
-    lcd.printf("%.1f %.1f ug", oobLastPm25, oobLastPm10);
+    lcd.printf("%.1f %.1f ug", oobLastPm25x10 / 10.0f, oobLastPm10x10 / 10.0f);
     lcd.setCursor(8, 5 * 8);
     lcd.printf("%.2f %s %c%c", readings.soundDbA, units.sound, motion, conn);
 
@@ -244,7 +240,7 @@ void doOnFreshBoot()
     preferences.putUInt(PREF_LAST_RESET_REASON, esp_reset_reason());
     preferences.end();
   }
-#ifdef THE_BOX
+#ifdef HAS_DISPLAY
   enableBacklight(true);
 
   // lcd
@@ -256,7 +252,9 @@ void doOnFreshBoot()
   String tmp2 = "lastReset: " + String(prefs.lastResetReason);
   printToLcdAndSerial(tmp2);
   printToLcdAndSerial("init scd41");
-
+#else
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LED_ON_STATE);
 #endif
 
   stayAwakeUntilTime = millis() + forceWakeupTimeout;
@@ -267,19 +265,19 @@ void doOnTouchpadWakeup()
   touchInterruptTime = millis();
   stayAwakeUntilTime = millis() + forceWakeupTimeout;
 
-#ifdef THE_BOX
+#ifdef HAS_DISPLAY
   updateLcdStatus(true);
   printSensorDataToLcd();
 #else
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  digitalWrite(LED_PIN, LED_ON_STATE);
 #endif
   connectToWiFiIfNeeded();
 }
 
 void doOnEveryBoot()
 {
-  btStop();
+  // btStop();
   Serial.begin(DEBUG_BAUD_RATE);
 
   ESP_LOGW(TAG_MAIN, "Wakeup: %s, mPm: %u, mSubmit: %u, bootTime: %lu", get_wakeup_reason_str(), measureCountModPm, measureCountModSubmit, millis());
@@ -337,7 +335,7 @@ void doWhileAwakeLoop()
 {
   uint64_t collectingTime = millis();
 
-#ifdef THE_BOX
+#ifdef HAS_DISPLAY
   if (!isIdle())
     printSensorDataToLcd();
 #endif
@@ -354,15 +352,11 @@ void doWhileAwakeLoop()
       pollAllSensors();
       collectingTime = millis();
 
-#ifdef THE_BOX
+#ifdef HAS_DISPLAY
       updateLcdStatus(true);
       printSensorDataToLcd();
 #endif
     }
-
-#ifdef OTA_ENABLED
-    ArduinoOTA.handle();
-#endif
 
     if (!touchInterruptProcessed)
     {
@@ -370,7 +364,7 @@ void doWhileAwakeLoop()
 #ifdef SUPPORTS_TOUCH
       touchAttachInterrupt(TOUCH_PIN, touchCallback, touchThreshold);
 #endif
-#ifdef THE_BOX
+#ifdef HAS_DISPLAY
       printSensorDataToLcd();
 #endif
     }
@@ -381,7 +375,7 @@ void doWhileAwakeLoop()
     delay(200);
   }
 
-#ifdef THE_BOX
+#ifdef HAS_DISPLAY
   if (lcdStarted)
     lcdPowerSaving(true);
 #endif
@@ -405,7 +399,8 @@ void WiFiLostIP(WiFiEvent_t event, WiFiEventInfo_t info)
   ESP_LOGW(TAG_MAIN, "Lost IP");
 }
 
-void syncTime() {
+void syncTime()
+{
   struct tm timeinfo;
   uint64_t oldTime = rtcMillis();
   unsigned long timeTaken = millis();
@@ -484,8 +479,6 @@ void gotIpTask(void *args)
 
 void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
 {
-  setCpuFreqIfNeeded(80);
-
   Serial.print("Got IP address: ");
   Serial.print(WiFi.localIP());
   Serial.print(" in ");
@@ -498,30 +491,6 @@ void WiFiGotIP(WiFiEvent_t event, WiFiEventInfo_t info)
       NULL,
       1,
       NULL);
-
-#ifdef OTA_ENABLED
-  if (!isIdle())
-  {
-    ArduinoOTA.onError([](ota_error_t error)
-                       {
-                         Serial.print("OTA Error: ");
-                         if (error == OTA_AUTH_ERROR)
-                           Serial.print("Auth Failed");
-                         else if (error == OTA_BEGIN_ERROR)
-                           Serial.print("Begin Failed");
-                         else if (error == OTA_CONNECT_ERROR)
-                           Serial.print("Connect Failed");
-                         else if (error == OTA_RECEIVE_ERROR)
-                           Serial.print("Receive Failed");
-                         else if (error == OTA_END_ERROR)
-                           Serial.print("End Failed");
-                         Serial.println();
-                         Serial.flush();
-                         //  ESP.restart();
-                       });
-    ArduinoOTA.begin();
-  }
-#endif
 }
 
 void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info)
@@ -541,9 +510,6 @@ void connectToWiFiIfNeeded()
   if (WiFi.status() == WL_CONNECTED)
     return;
   timeItTime = millis();
-
-  if (strlen(prefs.wifiPassword) > 0)
-    setCpuFreqIfNeeded(160);
 
   WiFi.setSleep(true);
   WiFi.setAutoReconnect(false);
@@ -638,8 +604,8 @@ void pollAllSensors()
 
   if (!oobValuesUsed)
   {
-    readings.pm25 = oobLastPm25;
-    readings.pm10 = oobLastPm10;
+    readings.pm25x10 = oobLastPm25x10;
+    readings.pm10x10 = oobLastPm10x10;
     oobValuesUsed = true;
   }
 #endif
@@ -739,12 +705,6 @@ void setup()
   {
     pollSds();
   }
-
-  if (bitsetContains(wakeupReasonsBitset, WAKEUP_MEASURE_CO2_ONLY) && !sdsRunning)
-  {
-    Wire.begin();
-    pollScd41();
-  }
 #endif
 
   if (bitsetContains(wakeupReasonsBitset, WAKEUP_AP_MODE))
@@ -778,8 +738,17 @@ void setup()
   {
     WiFi.disconnect(true);
   }
-
   LittleFS.end();
+
+  // send a BLE adv
+
+  uint8_t advData[31] = {0};
+  uint8_t advDataLen = readingsToAdvData(readings, prefs.uriPrefix[0], advData);
+
+  uint64_t t1 = millis();
+  do_ble_adv(advData, advDataLen);
+  uint64_t t2 = millis() - t1;
+  Serial.printf("BLE adv took: %llu ms\n", t2);
 
   WakeupTask *wt = priorityQueuePop(wakeupTasksQ);
   // make times in the past to 1 sec

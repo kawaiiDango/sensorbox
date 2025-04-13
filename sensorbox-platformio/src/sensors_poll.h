@@ -3,17 +3,19 @@
 #include <my_buffers.h>
 #include <my_utils.h>
 
-#ifdef THE_BOX
-
+#ifdef HAS_DISPLAY
 #include <Adafruit_GFX.h>
 #include <Adafruit_PCD8544.h>
+#endif
+
+#ifdef THE_BOX
 #include <SdsDustSensor.h>
 #include <Adafruit_TSL2591.h>
 #include <Adafruit_BMP280.h>
 #include <SensirionI2cSht4x.h>
 #include <SensirionI2CScd4x.h>
 #include "audio_read.h"
-#define PM_SENSOR_RUNTIME_SECS (33)
+#define PM_SENSOR_RUNTIME_SECS (31)
 
 #else
 
@@ -22,23 +24,17 @@
 
 #endif
 
-const char *TAG_SENSORS_POLL = "sensors_poll";
+#ifdef HAS_DISPLAY
+Adafruit_PCD8544 lcd = Adafruit_PCD8544(LCD_DC_PIN, LCD_CS_PIN, LCD_RST_PIN);
+bool lcdStarted = false;
+bool backlightOn = false;
+bool lcdSleeping = false;
+#endif
 
 #ifdef THE_BOX
 
 RTC_DATA_ATTR tsl2591Gain_t prevTslGain = TSL2591_GAIN_MED;
 bool tslConfigured = false;
-Adafruit_PCD8544 lcd = Adafruit_PCD8544(LCD_DC_PIN, LCD_CS_PIN, LCD_RST_PIN);
-bool lcdStarted = false;
-
-bool backlightOn = false;
-bool lcdSleeping = false;
-
-RTC_DATA_ATTR float oobLastPm25 = NAN;
-RTC_DATA_ATTR float oobLastPm10 = NAN;
-RTC_DATA_ATTR short lastCo2 = -1;
-RTC_DATA_ATTR short lastPressure = -1;
-RTC_DATA_ATTR bool oobValuesUsed = false;
 RTC_DATA_ATTR bool sdsRunning = false;
 RTC_DATA_ATTR bool scd41Inited = false;
 
@@ -46,6 +42,7 @@ RTC_DATA_ATTR bool scd41Inited = false;
 RTC_DATA_ATTR int64_t vocStartTime = 0;
 #endif
 
+const char *TAG_SENSORS_POLL = "sensors_poll";
 Readings readings;
 RTC_DATA_ATTR uint8_t measureCountModPm = 0;
 RTC_DATA_ATTR uint8_t measureCountModSubmit = 0;
@@ -214,12 +211,7 @@ void pollTSL2591()
   tsl.disable();
 }
 
-void pollPir()
-{
-  pinMode(PIR_PIN, INPUT);
-  readings.motion = digitalRead(PIR_PIN) == HIGH;
-}
-
+#ifdef HAS_DISPLAY
 void enableBacklight(bool enabled)
 {
   if (enabled == backlightOn)
@@ -261,54 +253,7 @@ void updateLcdStatus(bool enable)
   enableBacklight(enable);
 }
 
-uint16_t scd41_measureSingleShotNoWait()
-{
-  uint16_t error;
-  uint8_t buffer[2];
-  SensirionI2CTxFrame txFrame(buffer, 2);
-
-  error = txFrame.addCommand(0x219D);
-  if (error)
-  {
-    return error;
-  }
-
-  // #define SCD4X_I2C_ADDRESS 0x62
-  error = SensirionI2CCommunication::sendFrame(0x62, txFrame, Wire);
-  // delay(5000);
-  return error;
-}
-
-uint16_t SensirionI2CScd4x_getAmbientPressure(uint16_t &ambientPressure)
-{
-  uint16_t error;
-  uint8_t buffer[3];
-  SensirionI2CTxFrame txFrame(buffer, 3);
-
-  error = txFrame.addCommand(0xe000);
-  if (error)
-  {
-    return error;
-  }
-
-  error = SensirionI2CCommunication::sendFrame(0x62, txFrame, Wire);
-  if (error)
-  {
-    return error;
-  }
-
-  delay(1);
-
-  SensirionI2CRxFrame rxFrame(buffer, 3);
-  error = SensirionI2CCommunication::receiveFrame(0x62, 3, rxFrame, Wire);
-  if (error)
-  {
-    return error;
-  }
-
-  error |= rxFrame.getUInt16(ambientPressure);
-  return error;
-}
+#endif
 
 void scd41PrintError(uint16_t error)
 {
@@ -370,6 +315,9 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
 
   Wire.begin();
   scd41.begin(Wire, SCD41_I2C_ADDR_62);
+
+  scd41.wakeUp(); // always returns NO_ERROR
+
   uint16_t error = scd41.stopPeriodicMeasurement();
   if (error)
   {
@@ -377,68 +325,107 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
     return;
   }
 
+  // reset the sensor if asked
+
+  if (scd41NeedsReset)
+  {
+    ESP_LOGW(TAG_SENSORS_POLL, "Resetting the scd41");
+
+    error = scd41.performFactoryReset();
+    if (error)
+    {
+      scd41PrintError(error);
+      return;
+    }
+    scd41NeedsReset = false;
+  }
+
   // get the params stored in eeprom
 
-  error = scd41.getAutomaticSelfCalibrationEnabled(storedAscEnabled);
+  // error = scd41.getAutomaticSelfCalibrationEnabled(storedAscEnabled);
 
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
+  // if (error)
+  // {
+  //   scd41PrintError(error);
+  //   return;
+  // }
 
-  error = scd41.getAutomaticSelfCalibrationInitialPeriod(storedAscInitialPeriod); // is 44 in factory settings
+  // error = scd41.getAutomaticSelfCalibrationInitialPeriod(storedAscInitialPeriod); // is 44 in factory settings
 
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
+  // if (error)
+  // {
+  //   scd41PrintError(error);
+  //   return;
+  // }
 
-  error = scd41.getAutomaticSelfCalibrationStandardPeriod(storedAscStandardPeriod); // is 156 in factory settings
+  // error = scd41.getAutomaticSelfCalibrationStandardPeriod(storedAscStandardPeriod); // is 156 in factory settings
 
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
+  // if (error)
+  // {
+  //   scd41PrintError(error);
+  //   return;
+  // }
 
-  error = scd41.getTemperatureOffset(storedTemperatureOffset); // is 4 in factory settings
+  // error = scd41.getTemperatureOffset(storedTemperatureOffset); // is 4 in factory settings
 
-  if (error)
-  {
-    scd41PrintError(error);
-    return;
-  }
+  // if (error)
+  // {
+  //   scd41PrintError(error);
+  //   return;
+  // }
+
+  // ESP_LOGW(TAG_SENSORS_POLL, "ASC initial period: %u, standard period: %u, stored: %u, %u", ascInitialPeriod, ascStandardPeriod, storedAscInitialPeriod, storedAscStandardPeriod);
 
   // write the new params if they are different
 
-  if (storedAscInitialPeriod == 0 || storedAscInitialPeriod != ascInitialPeriod ||
-      storedAscStandardPeriod == 0 || storedAscStandardPeriod != ascStandardPeriod ||
-      storedAscEnabled == false || storedTemperatureOffset != 0)
+  // if (storedAscInitialPeriod == 0 || storedAscInitialPeriod != ascInitialPeriod ||
+  //     storedAscStandardPeriod == 0 || storedAscStandardPeriod != ascStandardPeriod ||
+  //     storedAscEnabled == false || storedTemperatureOffset != 0)
+  // {
+  //   ESP_LOGW(TAG_SENSORS_POLL, "ASC initial period: %u, standard period: %u, stored: %u, %u", ascInitialPeriod, ascStandardPeriod, storedAscInitialPeriod, storedAscStandardPeriod);
+  //   error = scd41.setAutomaticSelfCalibrationEnabled(true);
+  //   if (error)
+  //   {
+  //     scd41PrintError(error);
+  //     return;
+  //   }
+
+  //   error = scd41.setAutomaticSelfCalibrationInitialPeriod(ascInitialPeriod);
+  //   if (error)
+  //   {
+  //     scd41PrintError(error);
+  //     return;
+  //   }
+
+  //   error = scd41.setAutomaticSelfCalibrationStandardPeriod(ascStandardPeriod);
+  //   if (error)
+  //   {
+  //     scd41PrintError(error);
+  //     return;
+  //   }
+
+  //   error = scd41.setTemperatureOffset(0);
+  //   if (error)
+  //   {
+  //     scd41PrintError(error);
+  //     return;
+  //   }
+
+  //   if (SCD41_WRITE_EEPROM_ENABLED)
+  //   {
+  //     error = scd41.persistSettings();
+  //     if (error)
+  //     {
+  //       scd41PrintError(error);
+  //       return;
+  //     }
+
+  //     ESP_LOGW(TAG_SENSORS_POLL, "SCD41 settings persisted");
+  //   }
+  // }
+
+  if (storedTemperatureOffset != 0)
   {
-    ESP_LOGW(TAG_SENSORS_POLL, "ASC initial period: %u, standard period: %u, stored: %u, %u", ascInitialPeriod, ascStandardPeriod, storedAscInitialPeriod, storedAscStandardPeriod);
-    error = scd41.setAutomaticSelfCalibrationEnabled(true);
-    if (error)
-    {
-      scd41PrintError(error);
-      return;
-    }
-
-    error = scd41.setAutomaticSelfCalibrationInitialPeriod(ascInitialPeriod);
-    if (error)
-    {
-      scd41PrintError(error);
-      return;
-    }
-
-    error = scd41.setAutomaticSelfCalibrationStandardPeriod(ascStandardPeriod);
-    if (error)
-    {
-      scd41PrintError(error);
-      return;
-    }
-
     error = scd41.setTemperatureOffset(0);
     if (error)
     {
@@ -461,14 +448,25 @@ Initial period: 2 days = 1440 single shots → Initial period parameter value = 
 
   // throw away the first reading
 
-  error = scd41.measureSingleShot();
+  // error = scd41.measureSingleShot();
+  // if (error)
+  // {
+  //   scd41PrintError(error);
+  //   return;
+  // }
+
+  // scd41.readMeasurement(co2, temperature, humidity);
+
+  scd41.startLowPowerPeriodicMeasurement();
+  delay(5000);
+
+  // throw away the first reading
+  error = scd41.readMeasurement(co2, temperature, humidity);
   if (error)
   {
     scd41PrintError(error);
     return;
   }
-
-  scd41.readMeasurement(co2, temperature, humidity);
 
   scd41Inited = true;
 
@@ -486,10 +484,12 @@ void pollScd41()
 
   scd41.begin(Wire, SCD41_I2C_ADDR_62);
 
-  if (!scd41Inited)
+  if (!scd41Inited || scd41NeedsReset)
   {
     initScd41();
+    return;
   }
+
   // read prev measurement
   error = scd41.readMeasurement(co2, temperature, humidity);
   if (error)
@@ -523,12 +523,38 @@ void pollScd41()
   }
 
   // error = scd41.measureSingleShot();
-  error = SensirionI2CScd4x_measureSingleShot();
+  // error = SensirionI2CScd4x_measureSingleShot();
+  // if (error)
+  // {
+  //   scd41PrintError(error);
+  //   return;
+  // }
+}
+
+void powerDownScd41()
+{
+  SensirionI2cScd4x scd41;
+  uint16_t error;
+
+  if (!scd41Inited)
+    return;
+
+  scd41.begin(Wire, SCD41_I2C_ADDR_62);
+  error = scd41.stopPeriodicMeasurement();
   if (error)
   {
     scd41PrintError(error);
     return;
   }
+
+  error = scd41.powerDown();
+  if (error)
+  {
+    scd41PrintError(error);
+    return;
+  }
+
+  scd41Inited = false;
 }
 
 void startSds()
@@ -543,7 +569,7 @@ void startSds()
   sdsRunning = true;
 
   Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
-  delay(1500);
+  delay(1400);
   // SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
   SdsDustSensor sds(Serial2);
 
@@ -569,6 +595,8 @@ void pollSds()
   Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
   SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
 
+  delay(700);
+
   auto pm = sds.queryPm();
   auto wsr = sds.sleep();
 
@@ -588,8 +616,8 @@ void pollSds()
   if (!wsr.isOk())
     ESP_LOGE(TAG_SENSORS_POLL, "Could not sleep: %s", wsr.statusToString().c_str());
 
-  oobLastPm25 = pm.pm25;
-  oobLastPm10 = pm.pm10;
+  oobLastPm25x10 = pm.pm25 * 10;
+  oobLastPm10x10 = pm.pm10 * 10;
   oobValuesUsed = false;
 
   ESP_LOGW(TAG_SENSORS_POLL, "PM2.5: %.2f, PM10: %.2f", pm.pm25, pm.pm10);
@@ -653,7 +681,7 @@ void pollDht20()
 
 #endif
 
-void pollBatteryVoltage()
+float pollBatteryVoltage(uint8_t pin)
 {
   float sum = 0;
   int rounds = 10;
@@ -661,12 +689,12 @@ void pollBatteryVoltage()
   float mean;
   int filteredCount = 0;
 
-  pinMode(BATTERY_VOLTAGE_PIN, INPUT);
+  pinMode(pin, INPUT);
 
   // First Pass: Collect readings
   for (int i = 0; i < rounds; i++)
   {
-    vReadings[i] = (float)analogReadMilliVolts(BATTERY_VOLTAGE_PIN) * 2 / 1000;
+    vReadings[i] = (float)analogReadMilliVolts(pin) * 2 / 1000;
     sum += vReadings[i];
   }
 
@@ -696,6 +724,15 @@ void pollBatteryVoltage()
   mean = mapf(mean, 3.88, 4.15, 3.84, 4.10); // for the lolin clone
 #endif
 
+  return mean;
+}
+
+void pollAllBatteryVoltages()
+{
+  float threshold = 0.05;
+  // poll the main battery voltage
+  float mean = pollBatteryVoltage(BATTERY_VOLTAGE_PIN);
+
   isBatterySpike = lastBatteryVoltage > 0 && fabs(lastBatteryVoltage - mean) > threshold;
 
   // prevent spikes from shutting down the device
@@ -707,6 +744,7 @@ void pollBatteryVoltage()
 
 #ifdef THE_BOX
       rtc_gpio_hold_dis((gpio_num_t)SDS_POWER_PIN);
+      powerDownScd41();
 #endif
 
       ESP_LOGE(TAG_SENSORS_POLL, "Battery voltage too low: %f, going to sleep", mean);
@@ -718,20 +756,37 @@ void pollBatteryVoltage()
 
   readings.voltageAvg = mean;
   lastBatteryVoltage = mean;
+
+#ifdef THE_BOX
+  // poll the second battery voltage
+  mean = pollBatteryVoltage(BATTERY_B_VOLTAGE_PIN);
+
+#ifdef ENABLE_LOW_BATTERY_SHUTDOWN
+  if (mean > 0.6 && mean < 3.5)
+  {
+    ESP_LOGE(TAG_SENSORS_POLL, "BatteryS voltage too low: %f, powering down scd41", mean);
+    Serial.flush();
+    powerDownScd41();
+  }
+#endif
+
+  readings.voltageAvgS = mean;
+#endif
 }
 
 void pollMainSensors(void *arg)
 {
-  pollBatteryVoltage();
+  pollAllBatteryVoltages();
   Wire.begin();
 #ifdef THE_BOX
   pollSht41();
   pollBmp280();
   pollTSL2591();
-  pollPir();
 
-  if (measureCountModPm != 0 && measureCountModSubmit != 0 &&
-      !sdsRunning && isIdle() && !isBatterySpike)
+  // if (measureCountModPm != 0 && measureCountModSubmit != 0 &&
+  //     !sdsRunning && isIdle() && !isBatterySpike)
+
+  if (isIdle())
     pollScd41();
 
 #else
@@ -743,9 +798,9 @@ void pollMainSensors(void *arg)
 
 void pollBoardStats()
 {
-  readings.freeHeap = ESP.getFreeHeap();
+  float freeHeap = ESP.getFreeHeap();
 
-  Serial.printf("Free heap: %.2fK\n", readings.freeHeap / 1024);
+  Serial.printf("Free heap: %.2fK\n", freeHeap / 1024);
 }
 
 void createPollingTask(TaskFunction_t taskFn,

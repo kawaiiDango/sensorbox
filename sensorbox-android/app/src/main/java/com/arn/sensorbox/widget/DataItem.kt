@@ -69,6 +69,10 @@ data class DataItem(
                 dataItems.add(DataItem(voltageAvg, "V", "🔋"))
             }
 
+            if (voltageAvgS != 0f) {
+                dataItems.add(DataItem(voltageAvgS, "V", "🔋s"))
+            }
+
             return dataItems
         }
     }

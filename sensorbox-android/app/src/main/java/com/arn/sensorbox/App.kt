@@ -2,6 +2,8 @@ package com.arn.sensorbox
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import androidx.datastore.core.MultiProcessDataStoreFactory
 import com.google.firebase.FirebaseApp
@@ -13,6 +15,22 @@ class App : Application() {
         super.onCreate()
         context = applicationContext
         FirebaseApp.initializeApp(applicationContext)
+
+        // Create notification channels
+        val notificationManager = getSystemService(NotificationManager::class.java)!!
+        val scanChannel = NotificationChannel(
+            BleScanService.CHANNEL_ID,
+            getString(R.string.ble_scan),
+            NotificationManager.IMPORTANCE_LOW
+        )
+        notificationManager.createNotificationChannel(scanChannel)
+
+        val fcmChannel = NotificationChannel(
+            getString(R.string.fcm_channel),
+            getString(R.string.fcm_channel_name),
+            NotificationManager.IMPORTANCE_LOW
+        )
+        notificationManager.createNotificationChannel(fcmChannel)
     }
 
     companion object {

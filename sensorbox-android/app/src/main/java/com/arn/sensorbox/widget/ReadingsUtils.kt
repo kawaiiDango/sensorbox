@@ -1,7 +1,12 @@
 package com.arn.sensorbox.widget
 
 
+import android.util.Log
+import com.arn.sensorbox.App
 import com.arn.sensorbox.BuildConfig
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.roundToInt
@@ -134,5 +139,146 @@ object ReadingsUtils {
             }
         }
         return -1f // Invalid concentration
+    }
+
+    fun updateWidgetData(
+        deviceName: String,
+        newData: SensorBoxData,
+        forceUpdate: Boolean = false,
+    ) {
+        fun withFallback(
+            newValue: Float,
+            oldValue: Float,
+        ): Float {
+            return if (newValue != 0f) {
+                newValue
+            } else {
+                oldValue
+            }
+        }
+
+        val cachedData = runBlocking { App.prefs.data.map { it.cachedData }.first() }.toMutableMap()
+
+        val firstDevice = BuildConfig.DEVICE_NAMES[0]
+        val secondDevice = BuildConfig.DEVICE_NAMES.getOrNull(1)
+
+        val savedTimestamp = cachedData[deviceName]?.timestamp ?: 0L
+
+        if (newData.timestamp < savedTimestamp && !forceUpdate) {
+            Log.d(
+                this::class.simpleName,
+                "onMessageReceived: ignoring old data with timestamp ${newData.timestamp} < $savedTimestamp"
+            )
+            return
+        }
+
+        if (secondDevice != null && deviceName == secondDevice) {
+            val oldData = cachedData[deviceName]
+
+            cachedData[deviceName] = oldData?.copy(
+                temperature = withFallback(newData.temperature, oldData.temperature),
+                humidity = withFallback(newData.humidity, oldData.humidity),
+                voltageAvg = withFallback(newData.voltageAvg, oldData.voltageAvg),
+                timestamp = newData.timestamp,
+                isFromBle = newData.isFromBle,
+            ) ?: newData
+        } else if (deviceName == firstDevice) {
+            val oldData = cachedData[deviceName]
+
+            cachedData[deviceName] = oldData?.copy(
+                temperature = withFallback(newData.temperature, oldData.temperature),
+                humidity = withFallback(newData.humidity, oldData.humidity),
+                pressure = withFallback(newData.pressure, oldData.pressure),
+                luminosity = withFallback(newData.luminosity, oldData.luminosity),
+                visible = withFallback(newData.visible, oldData.visible),
+                ir = withFallback(newData.ir, oldData.ir),
+                soundDbA = withFallback(newData.soundDbA, oldData.soundDbA),
+                soundDbZ = withFallback(newData.soundDbZ, oldData.soundDbZ),
+                pm25 = withFallback(newData.pm25, oldData.pm25),
+                pm10 = withFallback(newData.pm10, oldData.pm10),
+                co2 = withFallback(newData.co2, oldData.co2),
+                voltageAvg = withFallback(newData.voltageAvg, oldData.voltageAvg),
+                voltageAvgS = withFallback(newData.voltageAvgS, oldData.voltageAvgS),
+                timestamp = newData.timestamp,
+                isFromBle = newData.isFromBle,
+            ) ?: newData
+        }
+
+        runBlocking {
+            App.prefs.updateData { it.copy(cachedData = cachedData) }
+        }
+        // update all appwidgets
+        ListDataUtils.updateWidgets()
+    }
+
+    private fun ByteArray.parseFloat(startIdx: Int): Float {
+        if (this.size < startIdx + 4) {
+            return 0f
+        }
+
+        val intBits = this[startIdx + 3].toInt() shl 24 or
+                (this[startIdx + 2].toInt() and 0xFF shl 16) or
+                (this[startIdx + 1].toInt() and 0xFF shl 8) or
+                (this[startIdx].toInt() and 0xFF)
+        val floatVal = Float.fromBits(intBits)
+        if (floatVal.isNaN()) {
+            return 0f
+        }
+
+        return floatVal
+    }
+
+
+    private fun ByteArray.parseShortAsFloat(startIdx: Int, factor: Int): Float {
+        if (this.size < startIdx + 2) {
+            return 0f
+        }
+
+        val uIntVal = this[startIdx + 1].toUInt() shl 8 or
+                (this[startIdx].toUInt() and 0xffu)
+
+        return uIntVal.toFloat() / factor
+    }
+
+    private fun ByteArray.parseLong(startIdx: Int): Long {
+        if (this.size < startIdx + 4) {
+            return 0L
+        }
+
+        val longVal = this[startIdx + 3].toUInt() shl 24 or
+                (this[startIdx + 2].toUInt() and 0xffu shl 16) or
+                (this[startIdx + 1].toUInt() and 0xffu shl 8) or
+                (this[startIdx].toUInt() and 0xffu)
+        return longVal.toLong()
+    }
+
+    fun parseBleData(advData: ByteArray): SensorBoxData {
+        var advOffset = 0
+
+        fun pIncAdv(toAdd: Int): Int {
+            val existingOffset = advOffset
+            advOffset += toAdd
+            return existingOffset
+        }
+
+        val readings = SensorBoxData(
+            // parse advData
+            timestamp = advData.parseLong(pIncAdv(4)),
+            voltageAvg = advData.parseShortAsFloat(pIncAdv(2), 100),
+            temperature = advData.parseShortAsFloat(pIncAdv(2), 100),
+            humidity = advData.parseShortAsFloat(pIncAdv(2), 100),
+            pressure = advData.parseShortAsFloat(pIncAdv(2), 10),
+            luminosity = advData.parseShortAsFloat(pIncAdv(2), 1),
+            soundDbA = advData.parseShortAsFloat(pIncAdv(2), 100),
+            soundDbZ = advData.parseShortAsFloat(pIncAdv(2), 100),
+            pm25 = advData.parseShortAsFloat(pIncAdv(2), 10),
+            pm10 = advData.parseShortAsFloat(pIncAdv(2), 10),
+            co2 = advData.parseShortAsFloat(pIncAdv(2), 1),
+            isFromBle = true,
+        )
+
+        Log.d(this::class.simpleName, "parseBleData: $readings")
+
+        return readings
     }
 }

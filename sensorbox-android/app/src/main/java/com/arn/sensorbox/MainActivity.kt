@@ -1,41 +1,51 @@
 package com.arn.sensorbox
 
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.arn.sensorbox.ui.theme.AppTheme
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
+    private val snackbarFlow = MutableSharedFlow<String?>()
+
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -43,37 +53,58 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             AppTheme {
-                // A surface container using the 'background' color from the theme
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    AppContent()
+                val snackbarHostState = remember { SnackbarHostState() }
+                val snackbarText by snackbarFlow.collectAsState(initial = null)
+
+                // Observe the global snackbar flow
+                LaunchedEffect(snackbarText) {
+                    snackbarHostState.showSnackbar(snackbarText ?: return@LaunchedEffect)
                 }
+
+                Scaffold(
+                    topBar = {
+                        TopAppBar(
+                            title = { Text(stringResource(R.string.app_name)) },
+                        )
+                    },
+//                    floatingActionButtonPosition = FabPosition.End,
+//                    floatingActionButton = {
+//                        ExtendedFloatingActionButton(onClick = ::startScan) {
+//                            Text(
+//                                stringResource(R.string.ble_scan)
+//                            )
+//                        }
+//                    },
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                    content = { innerPadding ->
+                        AppContent(modifier = Modifier.padding(innerPadding))
+                    }
+                )
             }
         }
 
-        // Request notification permissions
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    android.Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                // Do nothing
-            } else {
-                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
-            }
-        }
+        // Request BLE scanning and notification permissions
+        if (!BleScanManager.hasPermissions())
+            BleScanManager.requestPermissions(this)
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AppContent() {
+private fun AppContent(
+    modifier: Modifier = Modifier,
+) {
     Column(
-        modifier = Modifier.wrapContentSize().padding(16.dp),
+        modifier = modifier
+            .padding(16.dp),
     ) {
-        val subscribedTopics = App.prefs.data.map { it.subscribedTopics }
+        val subscribedTopics by App.prefs.data.map { it.subscribedTopics }
             .collectAsState(emptySet())
+
+        val scanDurationSecs by App.prefs.data.map { it.scanDurationSecs }
+            .collectAsState(initial = 60)
+        var sliderPosition by remember(scanDurationSecs) { mutableFloatStateOf(scanDurationSecs.toFloat()) }
+        val interactionSource = remember { MutableInteractionSource() }
 
         val scope = rememberCoroutineScope()
 
@@ -84,11 +115,28 @@ private fun AppContent() {
         arrayOf("widget", "digests", "alerts").forEach { topic ->
             LabelledCheckbox(
                 name = topic,
-                checked = subscribedTopics.value.contains(topic)
+                checked = topic in subscribedTopics
             ) {
                 subscribeToTopic(scope, topic, it)
             }
         }
+
+        // slider for scan duration
+
+        Text(stringResource(R.string.scan_duration) + ": ${sliderPosition.toInt()}s")
+
+        Slider(
+            value = sliderPosition,
+            onValueChange = { sliderPosition = it },
+            valueRange = 30f..180f,
+            steps = (180 - 30) / 10,
+            interactionSource = interactionSource,
+            onValueChangeFinished = {
+                scope.launch {
+                    App.prefs.updateData { it.copy(scanDurationSecs = sliderPosition.toInt()) }
+                }
+            }
+        )
     }
 }
 

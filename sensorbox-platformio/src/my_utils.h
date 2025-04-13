@@ -12,6 +12,7 @@
 uint64_t stayAwakeUntilTime = 0;
 bool wasTouchpadWakeup = false;
 RTC_DATA_ATTR unsigned long lastAwakeDuration = 0;
+RTC_DATA_ATTR bool scd41NeedsReset = false;
 
 struct MyUnits {
     const char *dust;

@@ -56,6 +56,43 @@ class ReadingsResource(Resource):
     def __init__(self):
         super().__init__()
 
+    def reconstruct_fft(self, unique_values, sample_rate=48000, fft_n=2048):
+        # Recalculate logarithmic bin center frequencies.
+        log_bins = []
+        i = 0
+        while True:
+            freq = (sample_rate * 2 / fft_n) * (2 ** (i / 12.0))
+            if freq > (sample_rate / 2):
+                bin_count = i
+                break
+            log_bins.append(freq)
+            i += 1
+
+        full_resampled = []
+        prev_bin_start = -1
+        unique_idx = 0
+
+        # Loop over each bin in the same way as the C code.
+        # I am not considering the last bin, to make the number aligned and a multiple of 4, so subtract 1
+        # the answer turns out to be 84 bins at 48000 Hz and 2048 FFT size
+        for i in range(bin_count - 1 - 1):
+            bin_start = int(log_bins[i] / (sample_rate / fft_n))
+            bin_end = int(log_bins[i + 1] / (sample_rate / fft_n))
+
+            while bin_start == bin_end:
+                i += 1
+                bin_end = int(log_bins[i + 1] / (sample_rate / fft_n))
+
+            # If this bin's key is new, pick the next unique value.
+            if bin_start != prev_bin_start:
+                value = unique_values[unique_idx]
+                unique_idx += 1
+                prev_bin_start = bin_start
+            # Append the value for this bin.
+            full_resampled.append(value)
+
+        return full_resampled
+
     async def render_put(self, request: aiocoap.Message):
         global fcm_q_tasks
 
@@ -82,20 +119,21 @@ class ReadingsResource(Resource):
             bucket=consts.influx_bucket, record=point, write_precision=WritePrecision.S
         )
 
-        audio_fft_bytes = data.get("audioFft")
-
         fcm_q_message(topic, data)
 
+        audio_fft_bytes = data.get("audioFft")
+
         if audio_fft_bytes is not None:
+            audio_fft_reconstructed = self.reconstruct_fft(audio_fft_bytes)
+
             point = (
                 Point(uri_first_path(uri))
                 .tag("topic", uri_first_path(uri) + "/audioFft")
                 .time(data["timestamp"])
             )
 
-            for i in range(0, len(audio_fft_bytes)):
-                val = float(audio_fft_bytes[i])
-                point.field(f"bin{i:03}", val)
+            for i, val in enumerate(audio_fft_reconstructed):
+                point.field(f"bin{i:03}", float(val))
 
             logging.info(point)
             await write_api.write(

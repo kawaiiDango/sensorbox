@@ -14,7 +14,6 @@
 #include <arpa/inet.h>
 #include <file_ring_buffer.h>
 
-#define NUM_FFT_BINS 106
 #define COAP_TIMEOUT 750
 
 const static char *TAG_REPORTER = "reporter";
@@ -135,6 +134,15 @@ coap_session_t *coap_start_psk_session(coap_context_t *ctx, coap_address_t *dst_
 }
 #endif /* CONFIG_COAP_MBEDTLS_PSK */
 
+float shortAsFloat(short value, float factor)
+{
+    // convert -1 to NAN
+    if (value == -1)
+        return NAN;
+
+    return value / factor;
+}
+
 size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
 {
     CborEncoder root_encoder;
@@ -150,9 +158,6 @@ size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
     error |= cbor_encode_uint(&map_encoder, readings->timestampS);
 
 #ifdef THE_BOX
-    error |= cbor_encode_text_stringz(&map_encoder, "motion");
-    error |= cbor_encode_int(&map_encoder, readings->motion);
-
     error |= cbor_encode_text_stringz(&map_encoder, "ir");
     error |= cbor_encode_int(&map_encoder, readings->ir);
 
@@ -166,10 +171,10 @@ size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
     error |= cbor_encode_float(&map_encoder, readings->luminosity);
 
     error |= cbor_encode_text_stringz(&map_encoder, "pm25");
-    error |= cbor_encode_float(&map_encoder, readings->pm25);
+    error |= cbor_encode_float(&map_encoder, shortAsFloat(readings->pm25x10, 10));
 
     error |= cbor_encode_text_stringz(&map_encoder, "pm10");
-    error |= cbor_encode_float(&map_encoder, readings->pm10);
+    error |= cbor_encode_float(&map_encoder, shortAsFloat(readings->pm10x10, 10));
 
     error |= cbor_encode_text_stringz(&map_encoder, "soundDbA");
     error |= cbor_encode_float(&map_encoder, readings->soundDbA);
@@ -180,12 +185,11 @@ size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
     error |= cbor_encode_text_stringz(&map_encoder, "co2");
     error |= cbor_encode_int(&map_encoder, readings->co2);
 
-    error |= cbor_encode_text_stringz(&map_encoder, "audioFft");
-    error |= cbor_encode_byte_string(&map_encoder, readings->audioFft, NUM_FFT_BINS);
+    error |= cbor_encode_text_stringz(&map_encoder, "voltageAvgS");
+    error |= cbor_encode_float(&map_encoder, readings->voltageAvgS);
 
-#else
-    error |= cbor_encode_text_stringz(&map_encoder, "voc");
-    error |= cbor_encode_float(&map_encoder, readings->voc);
+    error |= cbor_encode_text_stringz(&map_encoder, "audioFft");
+    error |= cbor_encode_byte_string(&map_encoder, readings->audioFft, sizeof(readings->audioFft));
 #endif
 
     error |= cbor_encode_text_stringz(&map_encoder, "temperature");
@@ -194,11 +198,12 @@ size_t createReadingsCbor(Readings *readings, uint8_t *buffer)
     error |= cbor_encode_text_stringz(&map_encoder, "humidity");
     error |= cbor_encode_float(&map_encoder, readings->humidity);
 
-    error |= cbor_encode_text_stringz(&map_encoder, "freeHeap");
-    error |= cbor_encode_float(&map_encoder, readings->freeHeap);
+    // error |= cbor_encode_text_stringz(&map_encoder, "freeHeap");
+    // error |= cbor_encode_float(&map_encoder, readings->freeHeap);
 
     error |= cbor_encode_text_stringz(&map_encoder, "voltageAvg");
     error |= cbor_encode_float(&map_encoder, readings->voltageAvg);
+
 
     error |= cbor_encode_text_stringz(&map_encoder, "awakeTime");
     if (readings->awakeTime < 0)

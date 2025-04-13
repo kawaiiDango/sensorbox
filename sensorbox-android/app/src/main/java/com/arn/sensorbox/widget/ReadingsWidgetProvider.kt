@@ -1,12 +1,14 @@
 package com.arn.sensorbox.widget
 
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
-import android.util.Log
+import android.content.Intent
 import android.widget.RemoteViews
 import androidx.core.widget.RemoteViewsCompat
 import com.arn.sensorbox.App
+import com.arn.sensorbox.BleScanService
 import com.arn.sensorbox.BuildConfig
 import com.arn.sensorbox.R
 import com.arn.sensorbox.widget.DataItem.Companion.toDataItems
@@ -55,12 +57,14 @@ internal fun updateAppWidget(
             .forEach { (deviceName, sensorBoxData) ->
                 addItem(
                     deviceName.hashCode().toLong(),
-                    ListDataUtils.createHeader(sensorBoxData.timestamp)
+                    ListDataUtils.createHeader(sensorBoxData.timestamp, sensorBoxData.isFromBle)
                 )
 
                 val suffix =
-                    if (deviceName == BuildConfig.DEVICE_NAMES[0]) "" else deviceName.first()
-                        .toString()
+                    if (deviceName == BuildConfig.DEVICE_NAMES[0])
+                        ""
+                    else
+                        deviceName.first().toString()
 
                 sensorBoxData.toDataItems().forEach { dataItem ->
                     addItem(
@@ -74,6 +78,17 @@ internal fun updateAppWidget(
 
     rv.setEmptyView(R.id.data_list, R.id.no_data)
     RemoteViewsCompat.setRemoteAdapter(context, rv, appWidgetId, R.id.data_list, items)
+
+    // Set the onClickPendingIntent for the scan button
+    val scanIntent = PendingIntent.getForegroundService(
+        context,
+        55,
+        Intent(context, BleScanService::class.java),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    rv.setOnClickPendingIntent(R.id.scan_button, scanIntent)
+
     // Instruct the widget manager to update the widget
     appWidgetManager.updateAppWidget(appWidgetId, rv)
 }

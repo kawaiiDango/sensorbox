@@ -373,7 +373,7 @@ void testFileRingBuffer()
     for (size_t i = 0; i < READINGS_BUFFER_SIZE - 5; i++)
     {
         r.timestampS = i;
-        r.freeHeap = ESP.getFreeHeap();
+        r.awakeTime = millis();
 
         readingsBufferPush(&readingsBuffer, r);
     }

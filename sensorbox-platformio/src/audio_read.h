@@ -36,7 +36,6 @@
 #define DMA_BANKS 32
 #define FFT_N 2048
 #define FFT_MOD_SIZE (FFT_N / 2 + 1) // Number of samples for modification, ie up to Nyquist
-#define LOG_RESAMPLED_SIZE 108
 
 #define LEQ_PERIOD 1 // second(s)
 // #define WEIGHTING A_weighting // Also avaliable: 'C_weighting' or 'None' (Z_weighting)
@@ -268,38 +267,72 @@ void fill_fft_samples(float *repurposed_samples, float *window)
 
 void log_resample_fft(float *fft, uint8_t *resampled_fft)
 {
-    int i, j, bin_start_index, bin_end_index;
+    int i, j, bin_start_index, bin_end_index, bin_count;
+    int prev_bin_start = -1;
+    int unique_count = 0;
     float *log_bins = &samples[FFT_N + 1]; // repurposing the samples array
     float m;
 
     // Calculate the center frequencies of the logarithmic bins
-    for (i = 0; i < LOG_RESAMPLED_SIZE; i++)
+    for (i = 0;; i++)
     {
         log_bins[i] = ((float)SAMPLE_RATE * 2 / FFT_N) * powf(2.0f, (float)i / 12);
+
+        if (log_bins[i] > (SAMPLE_RATE / 2))
+        {
+            // I am not considering the last bin, to make the number aligned and a multiple of 4, so subtract 1
+            // the answer turns out to be 84 bins at 48000 Hz and 2048 FFT size
+            bin_count = i - 1;
+            break;
+        }
     }
 
-    // Map each logarithmic bin to a set of linearly spaced bins and average their values
-    for (i = 0; i < LOG_RESAMPLED_SIZE - 1 - 1; i++)
+    // // Map each logarithmic bin to a set of linearly spaced bins and take max of their values
+    // for (i = 0; i < bin_count - 1; i++)
+    // {
+    //     bin_start_index = log_bins[i] / ((float)SAMPLE_RATE / (float)FFT_N);
+    //     bin_end_index = log_bins[i + 1] / ((float)SAMPLE_RATE / (float)FFT_N);
+
+    //     // sum = 0;
+    //     // for (j = bin_start_index; j <= bin_end_index; j++)
+    //     //     sum += fft[j];
+    //     // resampled_fft[i] = sum / (float)(bin_end_index - bin_start_index + 1);
+    //     m = 0;
+    //     for (j = bin_start_index; j <= bin_end_index; j++)
+    //         m = max(m, fft[j]);
+
+    //     if (m > 0)
+    //         // arbritarily scale by 2 for a bit more resolution in the display
+    //         resampled_fft[i] = 2 * static_cast<uint8_t>(min(255.0f, m));
+    //     else
+    //         resampled_fft[i] = 0;
+
+    //     printf("%d (%df - %df): %fHz %d\n", i, bin_start_index, bin_end_index, log_bins[i], resampled_fft[i]);
+    // }
+
+    // For each logarithmic bin (except the last), compute the FFT value.
+    // Only store the value if the computed bin_start differs from the last.
+    for (i = 0; i < bin_count - 1; i++)
     {
         bin_start_index = log_bins[i] / ((float)SAMPLE_RATE / (float)FFT_N);
         bin_end_index = log_bins[i + 1] / ((float)SAMPLE_RATE / (float)FFT_N);
 
-        // sum = 0;
-        // for (j = bin_start_index; j <= bin_end_index; j++)
-        //     sum += fft[j];
-        // resampled_fft[i] = sum / (float)(bin_end_index - bin_start_index + 1);
+        while (bin_start_index == bin_end_index)
+        {
+            bin_end_index = log_bins[++i + 1] / ((float)SAMPLE_RATE / (float)FFT_N);
+        }
+
         m = 0;
         for (j = bin_start_index; j <= bin_end_index; j++)
-            m = max(m, fft[j]);
+            m = fmax(m, fft[j]);
 
-        if (m > 0)
-            // arbritarily scale by 2 for a bit more resolution in the display
-            resampled_fft[i] = 2 * static_cast<uint8_t>(min(255.0f, m));
-        else
-            resampled_fft[i] = 0;
-
-        // resampled_fft[i] = m;
-        // printf("%d (%df - %df): %fHz %f\n", i, bin_start_index, bin_end_index, log_bins[i], resampled_fft[i]);
+        // Only store if key differs from previous.
+        if (bin_start_index != prev_bin_start)
+        {
+            // arbitrarily scale by 2 for a bit more resolution in the display
+            resampled_fft[unique_count++] = static_cast<uint8_t>(min(255.0f, 2 * m));
+            prev_bin_start = bin_start_index;
+        }
     }
 }
 

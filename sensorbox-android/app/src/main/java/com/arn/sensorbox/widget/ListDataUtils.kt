@@ -4,19 +4,21 @@ package com.arn.sensorbox.widget
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Intent
-import android.net.Uri
-import android.util.Log
 import android.widget.RemoteViews
+import androidx.core.net.toUri
 import com.arn.sensorbox.App
 import com.arn.sensorbox.R
 import java.text.DateFormat
 
 object ListDataUtils {
 
-    fun createHeader(timestamp: Long): RemoteViews {
+    fun createHeader(timestamp: Long, isFromBle: Boolean): RemoteViews {
         val headerView = RemoteViews(App.context.packageName, R.layout.appwidget_list_header)
         val formatter = DateFormat.getTimeInstance()
-        headerView.setTextViewText(R.id.appwidget_time, formatter.format(timestamp * 1000))
+        headerView.setTextViewText(
+            R.id.appwidget_time, formatter.format(timestamp * 1000) +
+                    if (isFromBle) " B" else ""
+        )
         return headerView
     }
 
@@ -38,7 +40,7 @@ object ListDataUtils {
         val i = Intent(App.context, ReadingsWidgetProvider::class.java).apply {
             action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, appWidgetIds)
-            data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+            data = toUri(Intent.URI_INTENT_SCHEME).toUri()
         }
         App.context.sendBroadcast(i)
 

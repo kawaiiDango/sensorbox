@@ -13,6 +13,7 @@ import java.io.OutputStream
 data class MyPrefs(
     val cachedData: Map<String, SensorBoxData> = emptyMap(),
     val subscribedTopics: Set<String> = emptySet(),
+    val scanDurationSecs: Int = 60,
 )
 
 object MyPrefsSerializer : Serializer<MyPrefs> {

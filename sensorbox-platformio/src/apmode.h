@@ -10,6 +10,7 @@
 #include <file_ring_buffer.h>
 
 #define AP_MODE_TIMEOUT 300000 // 5 minutes
+#define RESET_SCD41 "resetScd41"
 
 bool apModeDone = false;
 httpd_handle_t http_server = NULL;
@@ -74,6 +75,7 @@ esp_err_t root_get_handler(httpd_req_t *req)
     httpd_resp_sendstr_chunk(req, "<br>");
     sprintf(num_buf, "%d", prefs.timezoneOffsetS);
     send_input_field(req, PREF_TIMEZONE_OFFSET_S, "number", num_buf, true);
+    send_input_field(req, RESET_SCD41, "checkbox", "1", false);
     send_input_field(req, NAME_TIMESTAMP, "number", "0", true);
     httpd_resp_sendstr_chunk(req, "<br>");
     httpd_resp_sendstr_chunk(req, "<input type='submit' value='Save'>");
@@ -243,7 +245,7 @@ esp_err_t root_post_handler(httpd_req_t *req)
 
                 if (oldTime / 1000 < APR_20_2023_S)
                     fixReadingsTimestamps(&readingsBuffer, oldTime / 1000);
-                
+
                 fixPqTimestamps(wakeupTasksQ, oldTime);
 
                 preferences.putUInt(PREF_LAST_CHANGED_S, tv.tv_sec);
@@ -251,7 +253,13 @@ esp_err_t root_post_handler(httpd_req_t *req)
             else
                 preferences.putUInt(PREF_LAST_CHANGED_S, 0);
         }
-
+        else if (strcmp(key, RESET_SCD41) == 0)
+        {
+            if (atoi(value) == 1)
+            {
+                scd41NeedsReset = true;
+            }
+        }
         free(key);
         free(value);
     }

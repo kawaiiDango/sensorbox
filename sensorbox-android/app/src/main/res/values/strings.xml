@@ -1,5 +1,14 @@
 <resources>
-    <string name="app_name">Sensorbox</string>
+    <string name="app_name" translatable="false">Sensorbox</string>
+    <string name="fcm_channel" translatable="false">fcm_channel</string>
+    <string name="fcm_channel_name">FCM notifications</string>
     <string name="subscribe_to_topics">Subscribe to topics:</string>
     <string name="no_data">No data</string>
+    <string name="ble_scan">BLE scan</string>
+    <string name="scanning">Scanning</string>
+    <string name="scan_error">Scan error</string>
+    <string name="scan_duration">Scan duration</string>
+    <string name="ble_missing_permissions">BLE permissions are not granted</string>
+    <string name="ble_scan_found">Found: %1$s</string>
+    <string name="ble_scan_failed" formatted="true">BLE scan failed %1$d</string>
 </resources>

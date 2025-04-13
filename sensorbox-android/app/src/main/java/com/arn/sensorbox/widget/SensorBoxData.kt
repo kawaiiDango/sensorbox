@@ -17,5 +17,7 @@ data class SensorBoxData(
     val co2: Float = 0f,
     val usAqi: Float = 0f,
     val voltageAvg: Float = 0f,
+    val voltageAvgS: Float = 0f,
     val timestamp: Long = 0L,
+    val isFromBle: Boolean = false,
 )

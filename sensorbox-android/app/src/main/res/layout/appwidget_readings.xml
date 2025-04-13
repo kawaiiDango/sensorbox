@@ -28,4 +28,14 @@
         android:text="@string/no_data"
         android:textColor="@color/widgetFg" />
 
+    <ImageButton
+        android:id="@+id/scan_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:padding="16dp"
+        android:background="?android:attr/selectableItemBackground"
+        android:contentDescription="@string/ble_scan"
+        android:src="@drawable/ic_scanning" />
+
 </FrameLayout>
