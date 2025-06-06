@@ -32,7 +32,7 @@
 #endif
 #define DEFAULT_NTP_SERVER "pool.ntp.org"
 #define DEFAULT_REPORTING_INTERVAL 30 * 60 * 1000
-#define DEFAULT_COLLECTING_INTERVAL 2 * 60 * 1000
+#define DEFAULT_COLLECTING_INTERVAL 1 * 60 * 1000
 
 const char *TAG_PREFS = "prefs";
 

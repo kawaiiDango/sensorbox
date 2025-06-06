@@ -59,7 +59,7 @@ public:
         if (began)
             return;
 
-        if (!LittleFS.begin(true))
+        if (!LittleFS.begin(true, "/littlefs", 10, "littlefs"))
         {
             ESP_LOGE(TAG_FRB, "An Error has occurred while mounting LittleFS");
             return;

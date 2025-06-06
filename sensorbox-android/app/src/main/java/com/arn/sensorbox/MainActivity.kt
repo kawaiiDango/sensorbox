@@ -129,7 +129,7 @@ private fun AppContent(
             value = sliderPosition,
             onValueChange = { sliderPosition = it },
             valueRange = 30f..180f,
-            steps = (180 - 30) / 10,
+            steps = (180 - 30) / 10 - 1,
             interactionSource = interactionSource,
             onValueChangeFinished = {
                 scope.launch {

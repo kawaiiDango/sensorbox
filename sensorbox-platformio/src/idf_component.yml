@@ -4,7 +4,7 @@ dependencies:
 
   cbor: "^0.6.0"
   coap: "^4.3.5"
-  esp-dsp: "^1.5.2"
+  esp-dsp: "^1.6.4"
 
   # nghttp: "^1.50.0"
   # esp_jpeg: "^1.0.4"

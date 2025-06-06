@@ -106,7 +106,7 @@ class ReadingsResource(Resource):
         point = (
             Point(uri_first_path(uri))
             .tag("topic", uri_to_topic(uri))
-            .time(data["timestamp"])
+            .time(data["timestamp"], WritePrecision.S)
         )
 
         for key, value in data.items():
@@ -129,7 +129,7 @@ class ReadingsResource(Resource):
             point = (
                 Point(uri_first_path(uri))
                 .tag("topic", uri_first_path(uri) + "/audioFft")
-                .time(data["timestamp"])
+                .time(data["timestamp"], WritePrecision.S)
             )
 
             for i, val in enumerate(audio_fft_reconstructed):

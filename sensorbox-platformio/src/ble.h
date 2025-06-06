@@ -12,7 +12,7 @@
 #include <esp_bt.h>
 
 #define BLE_GAP_ADV_ITVL 32 // 20ms
-#define BLE_GAP_ADV_DURATION_MS 50
+#define BLE_GAP_ADV_DURATION_MS 25
 #define CONFIG_EXAMPLE_RANDOM_ADDR 1
 
 void bleprph_advertise(void);

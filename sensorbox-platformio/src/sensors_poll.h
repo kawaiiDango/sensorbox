@@ -595,7 +595,7 @@ void pollSds()
   Serial2.begin(9600, SERIAL_8N1, SDS_TX_PIN, SDS_RX_PIN);
   SdsDustSensor sds(Serial2, RETRY_DELAY_MS_DEFAULT, 5);
 
-  delay(700);
+  delay(100);
 
   auto pm = sds.queryPm();
   auto wsr = sds.sleep();
