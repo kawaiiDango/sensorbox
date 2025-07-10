@@ -15,12 +15,12 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,6 +40,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -63,7 +64,7 @@ class MainActivity : ComponentActivity() {
 
                 Scaffold(
                     topBar = {
-                        TopAppBar(
+                        MediumTopAppBar(
                             title = { Text(stringResource(R.string.app_name)) },
                         )
                     },
@@ -133,7 +134,7 @@ private fun AppContent(
             interactionSource = interactionSource,
             onValueChangeFinished = {
                 scope.launch {
-                    App.prefs.updateData { it.copy(scanDurationSecs = sliderPosition.toInt()) }
+                    App.prefs.updateData { it.copy(scanDurationSecs = sliderPosition.roundToInt()) }
                 }
             }
         )

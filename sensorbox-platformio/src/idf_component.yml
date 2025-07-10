@@ -2,9 +2,9 @@ dependencies:
   # Required IDF version
   idf: ">=5.4"
 
-  cbor: "^0.6.0"
+  # cbor: "^0.6.0"
   coap: "^4.3.5"
-  esp-dsp: "^1.6.4"
+  esp-dsp: "^1.7.0"
 
   # nghttp: "^1.50.0"
   # esp_jpeg: "^1.0.4"

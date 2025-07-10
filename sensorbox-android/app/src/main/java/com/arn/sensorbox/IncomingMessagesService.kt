@@ -1,14 +1,10 @@
 package com.arn.sensorbox
 
 import android.util.Log
-import com.arn.sensorbox.widget.ListDataUtils
 import com.arn.sensorbox.widget.ReadingsUtils
 import com.arn.sensorbox.widget.SensorBoxData
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 
 class IncomingMessagesService : FirebaseMessagingService() {
 
