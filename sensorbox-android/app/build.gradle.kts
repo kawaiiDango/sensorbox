@@ -3,7 +3,6 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.com.android.application)
-    alias(libs.plugins.org.jetbrains.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.google.services)
     alias(libs.plugins.compose.compiler)
@@ -19,7 +18,8 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
         versionName = versionCode.toString()
-        setProperty("archivesBaseName", rootProject.name)
+
+        base.archivesName = rootProject.name
 
         val properties = Properties()
         try {
